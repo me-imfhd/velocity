@@ -1,0 +1,30 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.0",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "license": "MIT",
+  "scripts": {
+    "db:studio": "dotenv -e ../../.env prisma studio",
+    "db:generate": "prisma generate",
+    "db:migrate": "dotenv -e ../../.env prisma migrate dev",
+    "db:migrate:deploy": "dotenv -e ../../.env prisma migrate deploy",
+    "db:push": "dotenv -e ../../.env prisma db push --skip-generate",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.4.2",
+    "zod": "^3.23.8",
+    "zod-prisma": "^0.5.4",
+    "prisma": "^5.4.2"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.2.1",
+    "@types/node": "20.8.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.3",
+    "typescript": "^5.2.2",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*"
+  }
+}

@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:latest
+    ports:
+      - 5432:5432
+    restart: always
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: repo
+    volumes:
+      - db:/var/lib/postgresql/data
+      
+volumes:
+  db:
+    driver: local

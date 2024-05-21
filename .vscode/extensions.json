@@ -1,0 +1,6 @@
+{
+  "recommendations": [
+    "prisma.prisma",
+    "bradlc.vscode-tailwindcss" // Tailwind Intellisense
+  ]
+}

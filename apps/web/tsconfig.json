@@ -1,0 +1,25 @@
+{
+  "extends": "@repo/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "strictNullChecks": true
+  },
+  "include": [
+    ".",
+    "next.config.mjs",
+    "next-env.d.ts",
+    "postcss.config.cjs",
+    "tailwind.config.ts",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ]
+}

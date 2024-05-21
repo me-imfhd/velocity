@@ -1,0 +1,51 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "dotenv -e ../../.env next dev -- -p 3000",
+    "build": "dotenv -e ../../.env next build",
+    "start": "dotenv -e ../../.env next start -- -p 3000",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "dotenv-cli": "^7.2.1",
+    "@repo/api": "workspace:*",
+    "@repo/auth": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/tailwind-config": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/typography": "^0.5.9",
+    "@tanstack/react-query": "^4.35.7",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.16",
+    "next": "14.0.1",
+    "next-safe-action": "^6.2.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "@hookform/resolvers": "^3.4.2",
+    "react-hook-form": "^7.49.2",
+    "sonner": "^1.0.3",
+    "tailwindcss-animate": "^1.0.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/typography": "^0.5.9",
+    "@types/node": "20.8.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8.50.0",
+    "eslint-config-next": "14.0.3",
+    "postcss": "^8.4.26",
+    "prettier": "^3.0.3",
+    "prettier-plugin-tailwindcss": "^0.4.1",
+    "tailwindcss": "^3.3.3",
+    "typescript": "^5.2.2"
+  }
+}
