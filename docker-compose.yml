@@ -4,7 +4,7 @@ services:
   db:
     image: postgres:latest
     ports:
-      - 5432:5432
+      - 5112:5432
     restart: always
     environment:
       POSTGRES_USER: dev

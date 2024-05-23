@@ -67,9 +67,8 @@ model User {
   createdAt     DateTime  @default(now()) @map(name: "created_at")
   updatedAt     DateTime  @default(now()) @map(name: "updated_at")
 
-  accounts  Account[]
-  sessions  Session[]
-  computers Computer[]
+  accounts Account[]
+  sessions Session[]
 
   @@map(name: "users")
 }
@@ -81,14 +80,4 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map(name: "verification_tokens")
-}
-
-model Computer {
-  id     String @id @default(uuid())
-  brand  String
-  cores  Int
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }
