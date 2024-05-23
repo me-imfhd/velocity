@@ -5,6 +5,9 @@ export function fillOrder(order: Order) {
   let remainingQ = order.assetQuantity;
   if (order.orderType === "BUY") {
     for (const currentAskOrder of asks) {
+      if (currentAskOrder.userId === order.userId) {
+        continue;
+      }
       if (currentAskOrder.orderPrice > order.orderPrice) {
         // cuts to entry in the orderbook
         break;
@@ -20,7 +23,6 @@ export function fillOrder(order: Order) {
           asset,
           assetQuantity: remainingQ,
           price: currentAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
-          secondaryAsset: order.secondaryAsset,
           deductAssetFrom,
           addAssetTo,
         });
@@ -32,7 +34,6 @@ export function fillOrder(order: Order) {
           asset,
           assetQuantity: currentAskOrder.assetQuantity,
           price: currentAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
-          secondaryAsset: order.secondaryAsset,
           deductAssetFrom,
           addAssetTo,
         });
@@ -42,6 +43,9 @@ export function fillOrder(order: Order) {
     }
   } else if (order.orderType === "SELL") {
     for (const currentBidOrder of bids) {
+      if (currentBidOrder.userId === order.userId) {
+        continue;
+      }
       if (currentBidOrder.orderPrice < order.orderPrice) {
         // cuts to entry in the orderbook
         break;
@@ -57,7 +61,6 @@ export function fillOrder(order: Order) {
           asset,
           assetQuantity: remainingQ,
           price: currentBidOrder.orderPrice, // the price of selling the asset is lesser here, and we that much only
-          secondaryAsset: order.secondaryAsset,
           deductAssetFrom,
           addAssetTo,
         });
@@ -69,7 +72,6 @@ export function fillOrder(order: Order) {
           asset,
           assetQuantity: currentBidOrder.assetQuantity, // the price of selling the asset is lesser here, and we that much only
           price: currentBidOrder.orderPrice,
-          secondaryAsset: order.secondaryAsset,
           deductAssetFrom,
           addAssetTo,
         });
@@ -86,7 +88,6 @@ interface FlipBalance {
   addAssetTo: UserId;
   asset: Asset;
   assetQuantity: Quantity;
-  secondaryAsset: Asset;
   price: Price;
 }
 
@@ -94,21 +95,20 @@ function flipBalance({
   asset,
   assetQuantity,
   price,
-  secondaryAsset,
   deductAssetFrom,
   addAssetTo,
 }: FlipBalance) {
   const user1 = getUser(deductAssetFrom);
   const user2 = getUser(addAssetTo);
   const user_1_asset_quantity = user_asset_balance(user1, asset);
-  const user_1_balance = user_asset_balance(user1, secondaryAsset);
+  const user_1_balance = user_asset_balance(user1, "USDC");
   const user_2_asset_quantity = user_asset_balance(user2, asset);
-  const user_2_balance = user_asset_balance(user2, secondaryAsset);
+  const user_2_balance = user_asset_balance(user2, "USDC");
 
   user1.assets.set(asset, user_1_asset_quantity - assetQuantity); // deduct asset quantity
-  user1.assets.set(secondaryAsset, user_1_balance + price * assetQuantity); // add price
+  user1.assets.set("USDC", user_1_balance + price * assetQuantity); // add price
   user2.assets.set(asset, user_2_asset_quantity + assetQuantity); // add assets
-  user2.assets.set(secondaryAsset, user_2_balance - price * assetQuantity); // deduct price
+  user2.assets.set("USDC", user_2_balance - price * assetQuantity); // deduct price
 }
 
 export function getUser(userId: UserId) {
