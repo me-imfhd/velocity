@@ -87,7 +87,7 @@ class OrderLinkedList<T extends Order> implements Iterable<T> {
       this.list = { head: newNode, tail: newNode, size: 1 };
       return true;
     }
-    if (val.orderPrice <= this.list.head.val.orderPrice) {
+    if (val.orderPrice < this.list.head.val.orderPrice) {
       this.addFront(val);
       return true;
     }
@@ -111,11 +111,6 @@ class OrderLinkedList<T extends Order> implements Iterable<T> {
 
     return true;
   }
-
-  deductQuantity(remainingQ: Quantity) {
-    this.list!.head.val.assetQuantity -= remainingQ;
-  }
-
   addBuyOrders(val: T): boolean {
     const newNode = new LinkedListNode(val);
     if (!this.list) {
@@ -123,7 +118,7 @@ class OrderLinkedList<T extends Order> implements Iterable<T> {
       return true;
     }
 
-    if (val.orderPrice >= this.list.head.val.orderPrice) {
+    if (val.orderPrice > this.list.head.val.orderPrice) {
       this.addFront(val);
       return true;
     }
@@ -224,4 +219,4 @@ class OrderLinkedList<T extends Order> implements Iterable<T> {
   }
 }
 
-export default OrderLinkedList
+export default OrderLinkedList;
