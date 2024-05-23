@@ -1,0 +1,19 @@
+{
+  "name": "xapi",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@repo/api": "workspace:*",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
