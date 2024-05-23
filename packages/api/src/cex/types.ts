@@ -3,7 +3,7 @@ export type OrderType = "BUY" | "SELL";
 export type Quantity = number;
 export type UserId = string;
 export type OrderId = string;
-export type Asset = "SOL" | "APPL" | "BTC" | "USDC";
+export type Asset = "SOL" | "USDC"; // only sol and usdc exchange supported
 export type Price = number;
 export type Balance = number;
 
@@ -12,21 +12,20 @@ export interface Order {
   orderType: OrderType;
   asset: Asset;
   assetQuantity: Quantity;
-  secondaryAsset: Asset;
   orderPrice: Price;
   timestamp: Timestamp;
 }
 
-export interface UserAsset {
+export type UserAsset = {
   userId: UserId;
   asset: Asset;
-}
+};
 
 export type TotalEqualPriceOrders = number;
-export interface OrderTypeAndPrice {
+export type OrderTypeAndPrice = {
   orderPrice: Price;
   orderType: OrderType;
-}
-export interface User {
+};
+export type User = {
   assets: Map<Asset, Quantity>;
-}
+};
