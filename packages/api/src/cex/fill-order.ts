@@ -4,83 +4,77 @@ import { Asset, Order, Price, Quantity, User, UserId } from "./types";
 export function fillOrder(order: Order) {
   let remainingQ = order.assetQuantity;
   if (order.orderType === "BUY") {
-    const leastPriceAskOrder = asks.firstItem();
-    if (!leastPriceAskOrder) {
-      return remainingQ; // no asks to match with
-    }
-    for (const _ of asks) {
-      if (leastPriceAskOrder.orderPrice > order.orderPrice) {
+    for (const currentAskOrder of asks) {
+      if (currentAskOrder.orderPrice > order.orderPrice) {
         // cuts to entry in the orderbook
         break;
       }
       // we got a match! here price of buying the asset is >= the price least price other side is willing to buy at
       const asset = order.asset;
-      const userId1 = leastPriceAskOrder.userId;
-      const userId2 = order.userId;
+      const deductAssetFrom = currentAskOrder.userId;
+      const addAssetTo = order.userId;
 
-      if (leastPriceAskOrder.assetQuantity > remainingQ) {
-        asks.deductQuantity(remainingQ);
+      if (currentAskOrder.assetQuantity > remainingQ) {
+        currentAskOrder.assetQuantity -= remainingQ; // will deduct buy order quantity from the currentAskOrder
         flipBalance({
           asset,
           assetQuantity: remainingQ,
-          price: leastPriceAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
+          price: currentAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
           secondaryAsset: order.secondaryAsset,
-          userId1,
-          userId2,
+          deductAssetFrom,
+          addAssetTo,
         });
-        latestPrice.set(asset, leastPriceAskOrder.orderPrice);
-        return 0;
+        latestPrice.set(asset, currentAskOrder.orderPrice);
+        return 0; // stop looping all quantities are filled
       } else {
-        remainingQ -= leastPriceAskOrder.assetQuantity;
+        remainingQ -= currentAskOrder.assetQuantity;
         flipBalance({
           asset,
-          assetQuantity: leastPriceAskOrder.assetQuantity,
-          price: leastPriceAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
+          assetQuantity: currentAskOrder.assetQuantity,
+          price: currentAskOrder.orderPrice, // price for buying asset is more, but we only pay, what its being sold at
           secondaryAsset: order.secondaryAsset,
-          userId1,
-          userId2,
+          deductAssetFrom,
+          addAssetTo,
         });
         asks.removeFront();
+        // start next loop trying to fill remaining quantity
       }
     }
   } else if (order.orderType === "SELL") {
-    const maxPriceBuyOrder = bids.firstItem();
-    if (!maxPriceBuyOrder) {
-      return remainingQ; // no asks to match with
-    }
-    for (const _ of bids) {
-      if (maxPriceBuyOrder.orderPrice < order.orderPrice) {
+    for (const currentBidOrder of bids) {
+      if (currentBidOrder.orderPrice < order.orderPrice) {
         // cuts to entry in the orderbook
         break;
       }
       // we got a match! here price of selling the asset is <= the maximum price other side is willing to pay for
       const asset = order.asset;
-      const userId1 = order.userId;
-      const userId2 = maxPriceBuyOrder.userId;
+      const deductAssetFrom = order.userId;
+      const addAssetTo = currentBidOrder.userId;
 
-      if (maxPriceBuyOrder.assetQuantity > remainingQ) {
-        asks.deductQuantity(remainingQ);
+      if (currentBidOrder.assetQuantity > remainingQ) {
+        currentBidOrder.assetQuantity -= remainingQ;
         flipBalance({
           asset,
           assetQuantity: remainingQ,
-          price: maxPriceBuyOrder.orderPrice, // the price of selling the asset is lesser here, and we that much only
+          price: currentBidOrder.orderPrice, // the price of selling the asset is lesser here, and we that much only
           secondaryAsset: order.secondaryAsset,
-          userId1,
-          userId2,
+          deductAssetFrom,
+          addAssetTo,
         });
-        latestPrice.set(asset, maxPriceBuyOrder.orderPrice);
+        latestPrice.set(asset, currentBidOrder.orderPrice);
         return 0;
       } else {
-        remainingQ -= maxPriceBuyOrder.assetQuantity;
+        remainingQ -= currentBidOrder.assetQuantity;
         flipBalance({
           asset,
-          assetQuantity: maxPriceBuyOrder.assetQuantity, // the price of selling the asset is lesser here, and we that much only
-          price: maxPriceBuyOrder.orderPrice,
+          assetQuantity: currentBidOrder.assetQuantity, // the price of selling the asset is lesser here, and we that much only
+          price: currentBidOrder.orderPrice,
           secondaryAsset: order.secondaryAsset,
-          userId1,
-          userId2,
+          deductAssetFrom,
+          addAssetTo,
         });
         bids.removeFront();
+        // start next loop trying to fill remaining quantity
       }
     }
   }
@@ -88,8 +82,8 @@ export function fillOrder(order: Order) {
 }
 
 interface FlipBalance {
-  userId1: UserId;
-  userId2: UserId;
+  deductAssetFrom: UserId;
+  addAssetTo: UserId;
   asset: Asset;
   assetQuantity: Quantity;
   secondaryAsset: Asset;
@@ -101,20 +95,20 @@ function flipBalance({
   assetQuantity,
   price,
   secondaryAsset,
-  userId1,
-  userId2,
+  deductAssetFrom,
+  addAssetTo,
 }: FlipBalance) {
-  const user1 = getUser(userId1);
-  const user2 = getUser(userId2);
+  const user1 = getUser(deductAssetFrom);
+  const user2 = getUser(addAssetTo);
   const user_1_asset_quantity = user_asset_balance(user1, asset);
   const user_1_balance = user_asset_balance(user1, secondaryAsset);
   const user_2_asset_quantity = user_asset_balance(user2, asset);
   const user_2_balance = user_asset_balance(user2, secondaryAsset);
 
   user1.assets.set(asset, user_1_asset_quantity - assetQuantity); // deduct asset quantity
-  user1.assets.set(secondaryAsset, user_1_balance + price); // add price
+  user1.assets.set(secondaryAsset, user_1_balance + price * assetQuantity); // add price
   user2.assets.set(asset, user_2_asset_quantity + assetQuantity); // add assets
-  user2.assets.set(secondaryAsset, user_2_balance - price); // deduct price
+  user2.assets.set(secondaryAsset, user_2_balance - price * assetQuantity); // deduct price
 }
 
 export function getUser(userId: UserId) {
