@@ -201,9 +201,9 @@ class OrderLinkedList<T extends Order> implements Iterable<T> {
     this.list = undefined;
   }
 
-  fromArray(A: OrderLinkedList<Order>): Array<Order> {
+  fromArray(): Array<Order> {
     let array: Order[] = [];
-    for (const a of A) {
+    for (const a of this) {
       array.push(a);
     }
     return array;

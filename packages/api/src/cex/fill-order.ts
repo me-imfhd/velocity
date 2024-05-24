@@ -1,10 +1,11 @@
-import { asks, bids, latestPrice, users } from "./memory";
-import { Asset, Order, Price, Quantity, User, UserId } from "./types";
+import { asks, bids, latestPrice } from "./memory";
+import { Asset, Order, Price, Quantity, UserId } from "./types";
+import { getUser, user_asset_balance } from "./user";
 
 export function fillOrder(order: Order) {
-  console.log(`Recieved ${order.orderType} order.`);
+  console.log(`Recieved ${order.orderSide} order.`);
   let remainingQ = order.assetQuantity;
-  if (order.orderType === "BUY") {
+  if (order.orderSide === "BUY") {
     if (!asks || asks.isEmpty()) {
       console.log("\tAsks List is Empty");
       return remainingQ;
@@ -48,11 +49,7 @@ export function fillOrder(order: Order) {
         // start next loop trying to fill remaining quantity
       }
     }
-  } else if (order.orderType === "SELL") {
-    const userBalance = getUser(order.userId).assets.get(order.asset);
-    if (!userBalance || userBalance < order.assetQuantity * order.orderPrice) {
-      throw new Error("Not Enough Balance");
-    }
+  } else if (order.orderSide === "SELL") {
     if (!bids || bids.isEmpty()) {
       console.log("\tBids List is Empty");
       return remainingQ;
@@ -127,25 +124,4 @@ function flipBalance({
   user1.assets.set("USDC", user_1_balance + price * assetQuantity); // add price
   user2.assets.set(asset, user_2_asset_quantity + assetQuantity); // add assets
   user2.assets.set("USDC", user_2_balance - price * assetQuantity); // deduct price
-}
-
-export function getUser(userId: UserId) {
-  const userData = users.get(userId);
-  if (!userData) {
-    // throw new Error("User does not exist");
-    const data = {
-      assets: new Map<Asset, Quantity>().set("SOL", 0).set("USDC", 0),
-    };
-    users.set(userId, data);
-    return data;
-  }
-  return userData;
-}
-
-export function user_asset_balance(user: User, asset: Asset) {
-  const assetBalance = user.assets.get(asset);
-  if (!assetBalance) {
-    throw new Error("User does not have this asset");
-  }
-  return assetBalance;
 }

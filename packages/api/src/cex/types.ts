@@ -1,5 +1,6 @@
 export type Timestamp = number; // new Date(),getTime();
-export type OrderType = "BUY" | "SELL";
+export type OrderSide = "BUY" | "SELL";
+export type OrderType = "LIMIT" | "MARKET";
 export type Quantity = number;
 export type UserId = string;
 export type OrderId = string;
@@ -9,7 +10,8 @@ export type Balance = number;
 
 export interface Order {
   userId: UserId;
-  orderType: OrderType;
+  orderSide: OrderSide;
+  FOK: boolean;
   asset: Asset;
   assetQuantity: Quantity;
   orderPrice: Price;

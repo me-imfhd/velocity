@@ -1,21 +1,25 @@
-import { fillOrder, getUser } from "./fill-order";
-import { asks, bids, latestPrice } from "./memory";
+import { fillOrder } from "./fill-order";
+import { asks, bids, latestPrice, users } from "./memory";
 import {
   Asset,
   Order,
-  OrderType,
+  OrderSide,
   Price,
   Quantity,
   TotalEqualPriceOrders,
   UserId,
 } from "./types";
+import { getUser } from "./user";
 
 export function orderbook() {
-  return { bids, asks };
+  return { bids: bids.fromArray(), asks: asks.fromArray() };
 }
-export function limitOrder(order: Order) {
+export function order(order: Order) {
+  if (order.FOK) {
+    return marketOrder(order);
+  }
   let remainingQ = order.assetQuantity;
-  if (order.orderType === "BUY") {
+  if (order.orderSide === "BUY") {
     const userBalance = getUser(order.userId).assets.get("USDC");
     if (!userBalance || userBalance < order.assetQuantity * order.orderPrice) {
       throw new Error("Not Enough Balance");
@@ -46,7 +50,8 @@ export function getAssetsLtsPrice(asset: Asset) {
   const price = latestPrice.get(asset);
   if (!price) {
     return 0;
-  } else return price;
+  }
+  return price;
 }
 
 export function getDepth() {
@@ -70,19 +75,19 @@ export function getDepth() {
     }
   }
   return {
-    bidDepth: Array.from(bidDepth).slice(0, 20),
-    askDepth: Array.from(askDepth).reverse().slice(0, 20),
+    bidDepth: Array.from(bidDepth),
+    askDepth: Array.from(askDepth),
   };
 }
 interface GetQuote {
   userId: UserId;
   quantityToTrade: Quantity;
-  orderType: OrderType;
+  orderSide: OrderSide;
 }
-export function getQuote({ orderType, quantityToTrade, userId }: GetQuote) {
+export function getQuote({ orderSide, quantityToTrade, userId }: GetQuote) {
   let remainingQ = quantityToTrade;
   let totalCost = 0;
-  if (orderType === "BUY") {
+  if (orderSide === "BUY") {
     for (const currentAskOrder of asks) {
       if (currentAskOrder.userId === userId) {
         continue;
@@ -98,7 +103,7 @@ export function getQuote({ orderType, quantityToTrade, userId }: GetQuote) {
         continue;
       }
     }
-  } else if (orderType === "SELL") {
+  } else if (orderSide === "SELL") {
     for (const currentBidOrder of bids) {
       if (currentBidOrder.userId === userId) {
         continue;
@@ -125,13 +130,13 @@ export function marketOrder(order: Order) {
     if (remainingQ === 0) {
       return { filledQuantity: order.assetQuantity };
     }
-    throw new Error("Could not exchange all quantity");
+    throw new Error(`Could not exchange ${remainingQ} amount of asset.`);
   }
 }
 
 function checkOrder(order: Order) {
   let remainingQ = order.assetQuantity;
-  if (order.orderType === "BUY") {
+  if (order.orderSide === "BUY") {
     for (const currentAskOrder of asks) {
       if (currentAskOrder.userId === order.userId) {
         continue;
