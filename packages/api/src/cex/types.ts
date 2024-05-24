@@ -22,10 +22,6 @@ export type UserAsset = {
 };
 
 export type TotalEqualPriceOrders = number;
-export type OrderTypeAndPrice = {
-  orderPrice: Price;
-  orderType: OrderType;
-};
 export type User = {
   assets: Map<Asset, Quantity>;
 };

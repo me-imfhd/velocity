@@ -2,8 +2,13 @@ import { asks, bids, latestPrice, users } from "./memory";
 import { Asset, Order, Price, Quantity, User, UserId } from "./types";
 
 export function fillOrder(order: Order) {
+  console.log(`Recieved ${order.orderType} order.`);
   let remainingQ = order.assetQuantity;
   if (order.orderType === "BUY") {
+    if (!asks || asks.isEmpty()) {
+      console.log("\tAsks List is Empty");
+      return remainingQ;
+    }
     for (const currentAskOrder of asks) {
       if (currentAskOrder.userId === order.userId) {
         continue;
@@ -19,6 +24,7 @@ export function fillOrder(order: Order) {
 
       if (currentAskOrder.assetQuantity > remainingQ) {
         currentAskOrder.assetQuantity -= remainingQ; // will deduct buy order quantity from the currentAskOrder
+        console.log("\tOrder Matched");
         flipBalance({
           asset,
           assetQuantity: remainingQ,
@@ -29,6 +35,7 @@ export function fillOrder(order: Order) {
         latestPrice.set(asset, currentAskOrder.orderPrice);
         return 0; // stop looping all quantities are filled
       } else {
+        console.log(`\tOrder Splited `);
         remainingQ -= currentAskOrder.assetQuantity;
         flipBalance({
           asset,
@@ -42,6 +49,14 @@ export function fillOrder(order: Order) {
       }
     }
   } else if (order.orderType === "SELL") {
+    const userBalance = getUser(order.userId).assets.get(order.asset);
+    if (!userBalance || userBalance < order.assetQuantity * order.orderPrice) {
+      throw new Error("Not Enough Balance");
+    }
+    if (!bids || bids.isEmpty()) {
+      console.log("\tBids List is Empty");
+      return remainingQ;
+    }
     for (const currentBidOrder of bids) {
       if (currentBidOrder.userId === order.userId) {
         continue;
@@ -56,6 +71,7 @@ export function fillOrder(order: Order) {
       const addAssetTo = currentBidOrder.userId;
 
       if (currentBidOrder.assetQuantity > remainingQ) {
+        console.log("\tOrder Matched");
         currentBidOrder.assetQuantity -= remainingQ;
         flipBalance({
           asset,
@@ -67,6 +83,7 @@ export function fillOrder(order: Order) {
         latestPrice.set(asset, currentBidOrder.orderPrice);
         return 0;
       } else {
+        console.log("\tOrder Splited");
         remainingQ -= currentBidOrder.assetQuantity;
         flipBalance({
           asset,
@@ -98,6 +115,7 @@ function flipBalance({
   deductAssetFrom,
   addAssetTo,
 }: FlipBalance) {
+  console.log("Fliping Balance");
   const user1 = getUser(deductAssetFrom);
   const user2 = getUser(addAssetTo);
   const user_1_asset_quantity = user_asset_balance(user1, asset);
@@ -114,7 +132,12 @@ function flipBalance({
 export function getUser(userId: UserId) {
   const userData = users.get(userId);
   if (!userData) {
-    throw new Error("User does not exist");
+    // throw new Error("User does not exist");
+    const data = {
+      assets: new Map<Asset, Quantity>().set("SOL", 0).set("USDC", 0),
+    };
+    users.set(userId, data);
+    return data;
   }
   return userData;
 }

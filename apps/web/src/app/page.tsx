@@ -1,200 +1,156 @@
-import React from "react";
+"use client";
+import React, { useState } from "react";
 import { Button } from "@repo/ui/components";
-import { checkAuth } from "@repo/auth/server";
+import { getUser } from "@repo/api/src/cex/fill-order";
+import { Asset, UserId } from "@repo/api/src/cex/types";
+import { Orderbook } from "../components/orderbook-components";
 
-export default async function Page() {
-  await checkAuth();
+export default function Page() {
   return (
-    <div className="flex h-screen w-full items-center justify-evenly p-4">
+    <div className="flex h-screen w-full items-center justify-center gap-10 p-4">
       <Orderbook />
       <OrderComponent />
     </div>
   );
 }
 
-const Orderbook = () => {
-  return (
-    <div className="flex flex-col w-[250px] overflow-hidden border rounded-lg">
-      <OrderbookHeader />
-      <OrderbookContent />
-    </div>
-  );
-};
-
-const OrderbookHeader = () => {
-  return (
-    <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-baseTextMedEmphasis">
-      <p className="font-medium text-baseTextHighEmphasis">Price (USDC)</p>
-      <p className="font-medium text-right">Total (SOL)</p>
-    </div>
-  );
-};
-
-const OrderbookContent = () => {
-  return (
-    <div className="flex flex-col grow overflow-y-hidden">
-      <div className="flex flex-col h-full grow overflow-x-hidden">
-        <div className="flex flex-col h-full grow overflow-y-auto font-sans no-scrollbar snap-y snap-mandatory">
-          <OrderbookEntry price="171.76" total="56.85" type="ask" />
-          <OrderbookMidpoint price="171.75" />
-          <OrderbookEntry price="171.75" total="0.02" type="bid" />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface OrderbookEntryProps {
-  price: string;
-  total: string;
-  type: "ask" | "bid";
-}
-
-const OrderbookEntry = ({ price, total, type }: OrderbookEntryProps) => {
-  const textColor = type === "ask" ? "text-redText/90" : "text-greenText/90";
-
-  return (
-    <div className="flex h-[25px] items-center">
-      <button type="button" className="h-full w-full">
-        <div className="flex items-center justify-between px-3 h-full w-full overflow-hidden hover:border-dashed hover:border-baseBorderFocus/50">
-          <p
-            className={`z-10 text-left text-xs font-normal tabular-nums ${textColor}`}
-          >
-            {price}
-          </p>
-          <p className="z-10 text-right text-xs font-normal tabular-nums text-baseTextHighEmphasis/80">
-            {total}
-          </p>
-        </div>
-      </button>
-    </div>
-  );
-};
-
-interface OrderbookMidpointProps {
-  price: string;
-}
-
-const OrderbookMidpoint = ({ price }: OrderbookMidpointProps) => {
-  return (
-    <div className="flex flex-col snap-center px-3 py-1">
-      <div className="flex justify-between">
-        <p className="font-medium tabular-nums text-redText">{price}</p>
-      </div>
-    </div>
-  );
-};
-
 const OrderComponent = () => {
+  const asset: Asset = "SOL";
+  const [isBid, setIsBid] = useState(true);
+
   return (
     <div className="flex flex-col w-[300px] border rounded-lg">
-      <OrderTabs />
-      <OrderForm />
+      <div className="flex h-[60px]">
+        <div
+          onClick={() => setIsBid(true)}
+          className={`flex-1 flex justify-center items-center cursor-pointer border-b-2 p-4 text-green-400 ${
+            isBid
+              ? "bg-green-950 border-b-green-800"
+              : "bg-transparent hover:border-b-green-800"
+          }`}
+        >
+          <p className="text-sm font-semibold">Buy</p>
+        </div>
+        <div
+          onClick={() => setIsBid(false)}
+          className={`flex-1 flex justify-center items-center cursor-pointer border-b-2 p-4 text-red-400 ${
+            !isBid
+              ? "bg-red-950 border-b-red-800"
+              : "hover:border-b-red-800 bg-transparent"
+          }`}
+        >
+          <p className="text-sm font-semibold">Sell</p>
+        </div>
+      </div>
+      <OrderForm isBid={isBid} asset={asset} />
     </div>
   );
 };
 
-const OrderTabs = () => {
-  return (
-    <div className="flex h-[60px]">
-      <OrderTab label="Buy" active={true} />
-      <OrderTab label="Sell" active={false} />
-    </div>
-  );
-};
-
-interface OrderTabProps {
-  label: string;
-  active: boolean;
+interface OrderFormProps {
+  isBid: boolean;
+  asset: Asset;
 }
 
-const OrderTab = ({ label, active }: OrderTabProps) => {
-  const activeClass = active
-    ? "bg-green-950 border-b-green-800 text-green-400"
-    : "border-b-red-950 text-red-400 hover:border-b-red-800 hover:text-red-300";
+const OrderForm = ({ isBid, asset }: OrderFormProps) => {
+  const [isLimit, setIsLimit] = useState(true);
+  const [orderValueIsUSDC, setOrderValueIsUSDC] = useState(true);
 
-  return (
-    <div
-      className={`flex-1 flex justify-center items-center cursor-pointer border-b-2 p-4 ${activeClass}`}
-    >
-      <p className="text-sm font-semibold">{label}</p>
-    </div>
-  );
-};
-
-const OrderForm = () => {
   return (
     <div className="flex flex-col gap-1 px-3 w-[300px]">
-      <OrderTypeSelector />
-      <OrderBalance />
-      <OrderInput label="Price" currency="USDC" />
-      <OrderInput label="Quantity" currency="SOL" />
-      <OrderEstimation />
-      <Button variant="ghost" size="lg" className="my-2">
-        Sign up to trade
+      <div className="flex gap-5">
+        <div
+          onClick={() => setIsLimit(true)}
+          className="flex justify-center items-center cursor-pointer py-2"
+        >
+          <p
+            className={`text-sm font-medium py-1 hover:text-white border-b-2 hover:border-white ${
+              isLimit ? "text-white border-b-white" : "text-muted-foreground"
+            }`}
+          >
+            Limit
+          </p>
+        </div>
+        <div
+          onClick={() => setIsLimit(false)}
+          className="flex justify-center items-center cursor-pointer py-2"
+        >
+          <p
+            className={`text-sm font-medium py-1 hover:text-white border-b-2 hover:border-white ${
+              !isLimit ? "text-white border-b-white" : "text-muted-foreground"
+            }`}
+          >
+            Market
+          </p>
+        </div>
+      </div>
+      {isLimit ? (
+        <div className="flex flex-col">
+          <OrderBalance userId="1" asset={isBid ? "USDC" : asset} />
+          <OrderInput label="Price" currency="USDC" />
+          <OrderInput label="Quantity" currency={asset} />
+        </div>
+      ) : (
+        <div className="flex flex-col">
+          <p
+            onClick={() => setOrderValueIsUSDC(!orderValueIsUSDC)}
+            className="w-max text-start cursor-pointer text-sm hover:bg-transparent hover:text-muted-foreground/80 text-muted-foreground"
+          >
+            Change Order Value
+          </p>
+          <OrderBalance userId="1" asset={orderValueIsUSDC ? "USDC" : asset} />
+          <OrderInput currency={orderValueIsUSDC ? "USDC" : asset} />
+        </div>
+      )}
+      {isLimit && <OrderEstimation price={0} quantity={0} />}
+      <Button
+        variant="ghost"
+        size="lg"
+        className={`my-2 border rounded-xl ${
+          isBid
+            ? "border-green-900 bg-green-950 hover:bg-green-900"
+            : "border-red-900 bg-red-950 hover:bg-red-900"
+        }`}
+      >
+        {isBid ? "Buy" : "Sell"}
       </Button>
     </div>
   );
 };
 
-const OrderTypeSelector = () => {
-  return (
-    <div className="flex gap-5 mb-3">
-      <OrderTypeOption label="Limit" active={true} />
-      <OrderTypeOption label="Market" active={false} />
-    </div>
-  );
-};
-
-interface OrderTypeOptionProps {
-  label: string;
-  active: boolean;
+interface OrderBalanceProps {
+  userId: UserId;
+  asset: Asset;
 }
 
-const OrderTypeOption = ({ label, active }: OrderTypeOptionProps) => {
-  const activeClass = active
-    ? "border-b-blue-500 text-white"
-    : "border-transparent text-muted-foreground hover:border-white hover:text-white";
-
+const OrderBalance = ({ userId, asset }: OrderBalanceProps) => {
+  const balance = getUser(userId).assets.get(asset);
   return (
-    <div
-      className={`flex justify-center items-center cursor-pointer py-2 ${activeClass}`}
-    >
-      <p
-        className={`text-sm font-medium py-1 hover:text-white border-b-2 hover:border-white ${
-          active && "border-b-white"
-        }`}
-      >
-        {label}
+    <div className="flex justify-between py-2">
+      <p className="text-xs">Available Balance</p>
+      <p className="text-xs font-medium">
+        {balance?.toFixed(2)} {asset}
       </p>
     </div>
   );
 };
 
-const OrderBalance = () => {
-  return (
-    <div className="flex justify-between pb-2">
-      <p className="text-xs text-baseTextMedEmphasis">Available Balance</p>
-      <p className="text-xs font-medium text-baseTextHighEmphasis">0.00 USDC</p>
-    </div>
-  );
-};
-
 interface OrderInputProps {
-  label: string;
+  label?: string;
   currency: string;
 }
 
 const OrderInput = ({ label, currency }: OrderInputProps) => {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-baseTextMedEmphasis">{label}</p>
+      {label && <p className="text-xs text-baseTextMedEmphasis">{label}</p>}
       <div className="relative">
         <input
-          step="0.01"
           placeholder="0"
           className="h-12 w-[280px] pr-12 text-right text-2xl border-2 rounded-lg bg-[var(--background)]"
-          type="text"
+          step={0.01}
+          inputMode="numeric"
+          type="number"
         />
         <div className="absolute right-1 top-1 flex items-center p-2">
           <img
@@ -211,11 +167,16 @@ const OrderInput = ({ label, currency }: OrderInputProps) => {
   );
 };
 
-const OrderEstimation = () => {
+interface OrderEstimationProps {
+  price: number;
+  quantity: number;
+}
+
+const OrderEstimation = ({ price, quantity }: OrderEstimationProps) => {
   return (
     <div className="flex justify-end">
       <p className="text-xs font-medium text-baseTextMedEmphasis pr-2">
-        ≈ 0.00 USDC
+        ≈ {quantity * price} USDC
       </p>
     </div>
   );

@@ -73,3 +73,26 @@
     @apply px-4;
   }
 }
+
+::-webkit-scrollbar-track {
+  width: 0;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  width: 0;
+  background: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    margin: 0; 
+}

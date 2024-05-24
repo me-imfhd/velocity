@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export const idSchema = z.string().uuid();
 export type IdType = z.infer<typeof idSchema>;
-
+export function sleep(ms: number) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {}
+}
 export const BUCKET_NAME = process.env.BUCKET_NAME!;
 export const ACCESS_KEY_ID = process.env.ACCESS_KEY_ID!;
 export const ACCESS_SECRET = process.env.ACCESS_SECRET!;
