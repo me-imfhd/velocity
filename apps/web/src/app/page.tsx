@@ -1,23 +1,26 @@
 "use client";
 import React, { useState } from "react";
 import { Button } from "@repo/ui/components";
-import { getUser } from "@repo/api/src/cex/fill-order";
 import { Asset, UserId } from "@repo/api/src/cex/types";
 import { Orderbook } from "../components/orderbook-components";
+import { useOrderContext } from "../lib/hooks/order.hooks";
+import { getDepth, order } from "@repo/api/src/cex";
+import { toast } from "sonner";
 
 export default function Page() {
   return (
-    <div className="flex h-screen w-full items-center justify-center gap-10 p-4">
-      <Orderbook />
-      <OrderComponent />
+    <div>
+      <div className="flex h-screen w-full items-center justify-center gap-10 p-4">
+        <Orderbook />
+        <OrderComponent />
+      </div>
     </div>
   );
 }
 
 const OrderComponent = () => {
   const asset: Asset = "SOL";
-  const [isBid, setIsBid] = useState(true);
-
+  const { isBid, setIsBid } = useOrderContext();
   return (
     <div className="flex flex-col w-[300px] border rounded-lg">
       <div className="flex h-[60px]">
@@ -42,20 +45,47 @@ const OrderComponent = () => {
           <p className="text-sm font-semibold">Sell</p>
         </div>
       </div>
-      <OrderForm isBid={isBid} asset={asset} />
+      <OrderForm asset={asset} />
     </div>
   );
 };
 
 interface OrderFormProps {
-  isBid: boolean;
   asset: Asset;
 }
 
-const OrderForm = ({ isBid, asset }: OrderFormProps) => {
-  const [isLimit, setIsLimit] = useState(true);
+const OrderForm = ({ asset }: OrderFormProps) => {
+  const { isBid, isLimit, setIsLimit, quantity, price } = useOrderContext();
   const [orderValueIsUSDC, setOrderValueIsUSDC] = useState(true);
-
+  function handleSubmit() {
+    // assuming not making market orders
+    try {
+      if (isBid) {
+        const res = order({
+          asset,
+          assetQuantity: quantity,
+          FOK: false,
+          orderPrice: price,
+          orderSide: "BUY",
+          timestamp: new Date().getTime(),
+          userId: "1",
+        });
+      } else {
+        const res = order({
+          asset,
+          assetQuantity: quantity,
+          FOK: false,
+          orderPrice: price,
+          orderSide: "SELL",
+          timestamp: new Date().getTime(),
+          userId: "1",
+        });
+      }
+      const depth = getDepth();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
   return (
     <div className="flex flex-col gap-1 px-3 w-[300px]">
       <div className="flex gap-5">
@@ -72,8 +102,8 @@ const OrderForm = ({ isBid, asset }: OrderFormProps) => {
           </p>
         </div>
         <div
-          onClick={() => setIsLimit(false)}
-          className="flex justify-center items-center cursor-pointer py-2"
+          // onClick={() => setIsLimit(false)}
+          className="flex justify-center items-center py-2 cursor-not-allowed"
         >
           <p
             className={`text-sm font-medium py-1 hover:text-white border-b-2 hover:border-white ${
@@ -85,10 +115,10 @@ const OrderForm = ({ isBid, asset }: OrderFormProps) => {
         </div>
       </div>
       {isLimit ? (
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2">
           <OrderBalance userId="1" asset={isBid ? "USDC" : asset} />
-          <OrderInput label="Price" currency="USDC" />
-          <OrderInput label="Quantity" currency={asset} />
+          <OrderPrice />
+          <OrderQuantity asset={asset} />
         </div>
       ) : (
         <div className="flex flex-col">
@@ -99,11 +129,14 @@ const OrderForm = ({ isBid, asset }: OrderFormProps) => {
             Change Order Value
           </p>
           <OrderBalance userId="1" asset={orderValueIsUSDC ? "USDC" : asset} />
-          <OrderInput currency={orderValueIsUSDC ? "USDC" : asset} />
+          <MarketOrderQuantity asset={orderValueIsUSDC ? "USDC" : asset} />
         </div>
       )}
-      {isLimit && <OrderEstimation price={0} quantity={0} />}
+      {isLimit && <OrderEstimation />}
       <Button
+        onClick={() => {
+          handleSubmit();
+        }}
         variant="ghost"
         size="lg"
         className={`my-2 border rounded-xl ${
@@ -123,27 +156,24 @@ interface OrderBalanceProps {
   asset: Asset;
 }
 
-const OrderBalance = ({ userId, asset }: OrderBalanceProps) => {
-  const balance = getUser(userId).assets.get(asset);
+const OrderBalance = ({ asset }: OrderBalanceProps) => {
+  const solBalance = 0;
+  const usdcBalance = 0;
   return (
     <div className="flex justify-between py-2">
       <p className="text-xs">Available Balance</p>
       <p className="text-xs font-medium">
-        {balance?.toFixed(2)} {asset}
+        {asset === "USDC" ? usdcBalance.toFixed(2) : solBalance?.toFixed(2)}{" "}
+        {asset}
       </p>
     </div>
   );
 };
 
-interface OrderInputProps {
-  label?: string;
-  currency: string;
-}
-
-const OrderInput = ({ label, currency }: OrderInputProps) => {
+const MarketOrderQuantity = ({ asset }: { asset: Asset }) => {
+  const { marketOrderQuantity, setMarketOrderQuantity } = useOrderContext();
   return (
     <div className="flex flex-col gap-2">
-      {label && <p className="text-xs text-baseTextMedEmphasis">{label}</p>}
       <div className="relative">
         <input
           placeholder="0"
@@ -151,15 +181,16 @@ const OrderInput = ({ label, currency }: OrderInputProps) => {
           step={0.01}
           inputMode="numeric"
           type="number"
+          value={marketOrderQuantity}
+          onChange={(e) => setMarketOrderQuantity(Number(e.target.value))}
         />
         <div className="absolute right-1 top-1 flex items-center p-2">
           <img
-            alt={currency}
             loading="lazy"
             width="24"
             height="24"
             className="rounded-full"
-            src={`https://backpack.exchange/_next/image?url=%2Fcoins%2F${currency.toLowerCase()}.png&w=48&q=75`}
+            src={`https://backpack.exchange/_next/image?url=%2Fcoins%2F${asset.toLowerCase()}.png&w=48&q=75`}
           />
         </div>
       </div>
@@ -167,16 +198,71 @@ const OrderInput = ({ label, currency }: OrderInputProps) => {
   );
 };
 
-interface OrderEstimationProps {
-  price: number;
-  quantity: number;
-}
+const OrderPrice = () => {
+  const { price, setPrice } = useOrderContext();
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-baseTextMedEmphasis">Price</p>
+      <div className="relative">
+        <input
+          placeholder="0"
+          className="h-12 w-[280px] pr-12 text-right text-2xl border-2 rounded-lg bg-[var(--background)]"
+          step={0.01}
+          inputMode="numeric"
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(Number(e.target.value))}
+        />
+        <div className="absolute right-1 top-1 flex items-center p-2">
+          <img
+            loading="lazy"
+            width="24"
+            height="24"
+            className="rounded-full"
+            src={`https://backpack.exchange/_next/image?url=%2Fcoins%2F${"usdc"}.png&w=48&q=75`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+const OrderQuantity = ({ asset }: { asset: Asset }) => {
+  const { quantity, setQuantity } = useOrderContext();
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-baseTextMedEmphasis">Quantity</p>
+      <div className="relative">
+        <input
+          placeholder="0"
+          className="h-12 w-[280px] pr-12 text-right text-2xl border-2 rounded-lg bg-[var(--background)]"
+          step={0.01}
+          inputMode="numeric"
+          type="number"
+          value={quantity}
+          onChange={(e) => setQuantity(Number(e.target.value))}
+        />
+        <div className="absolute right-1 top-1 flex items-center p-2">
+          <img
+            loading="lazy"
+            width="24"
+            height="24"
+            className="rounded-full"
+            src={`https://backpack.exchange/_next/image?url=%2Fcoins%2F${asset.toLowerCase()}.png&w=48&q=75`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
-const OrderEstimation = ({ price, quantity }: OrderEstimationProps) => {
+const OrderEstimation = () => {
+  const { price, quantity } = useOrderContext();
+  const value = price * quantity;
+
   return (
     <div className="flex justify-end">
       <p className="text-xs font-medium text-baseTextMedEmphasis pr-2">
-        ≈ {quantity * price} USDC
+        ≈ {value.toFixed(2)} USDC
       </p>
     </div>
   );

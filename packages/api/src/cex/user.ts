@@ -1,11 +1,14 @@
 import { users } from "./memory";
 import { Asset, Quantity, User, UserId } from "./types";
 export function createUser(userId: UserId) {
+  if (users.has(userId)) {
+    return users.get(userId)!;
+  }
   const data = {
     assets: new Map<Asset, Quantity>().set("SOL", 0).set("USDC", 0),
   };
   users.set(userId, data);
-  return { message: "User Created Successfully" };
+  return users.get(userId)!;
 }
 export function getUser(userId: UserId) {
   const userData = users.get(userId);
@@ -16,7 +19,7 @@ export function getUser(userId: UserId) {
 }
 export function user_asset_balance(user: User, asset: Asset) {
   const assetBalance = user.assets.get(asset);
-  if (!assetBalance) {
+  if (assetBalance === undefined) {
     throw new Error("User does not have this asset");
   }
   return assetBalance;

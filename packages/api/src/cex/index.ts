@@ -1,5 +1,5 @@
 import { fillOrder } from "./fill-order";
-import { asks, bids, latestPrice, users } from "./memory";
+import { asks, bids, latestPrice } from "./memory";
 import {
   Asset,
   Order,
@@ -16,7 +16,8 @@ export function orderbook() {
 }
 export function order(order: Order) {
   if (order.FOK) {
-    return marketOrder(order);
+    throw new Error("Not taking marketOrder rn");
+    // return marketOrder(order);
   }
   let remainingQ = order.assetQuantity;
   if (order.orderSide === "BUY") {
@@ -32,7 +33,7 @@ export function order(order: Order) {
     bids.addBuyOrders(order);
   } else {
     const userBalance = getUser(order.userId).assets.get(order.asset);
-    if (!userBalance || userBalance < order.assetQuantity * order.orderPrice) {
+    if (!userBalance || userBalance < order.assetQuantity) {
       throw new Error(`Not Enough ${order.asset}`);
     }
     remainingQ = fillOrder(order);
@@ -79,93 +80,96 @@ export function getDepth() {
     askDepth: Array.from(askDepth),
   };
 }
-interface GetQuote {
-  userId: UserId;
-  quantityToTrade: Quantity;
-  orderSide: OrderSide;
-}
-export function getQuote({ orderSide, quantityToTrade, userId }: GetQuote) {
-  let remainingQ = quantityToTrade;
-  let totalCost = 0;
-  if (orderSide === "BUY") {
-    for (const currentAskOrder of asks) {
-      if (currentAskOrder.userId === userId) {
-        continue;
-      }
-      if (currentAskOrder.assetQuantity >= remainingQ) {
-        totalCost += remainingQ * currentAskOrder.orderPrice;
-        let avgPrice = totalCost / quantityToTrade;
-        // only return when all quantity is tradeable
-        return { avgPrice };
-      } else {
-        remainingQ -= currentAskOrder.assetQuantity;
-        totalCost += currentAskOrder.assetQuantity * currentAskOrder.orderPrice;
-        continue;
-      }
-    }
-  } else if (orderSide === "SELL") {
-    for (const currentBidOrder of bids) {
-      if (currentBidOrder.userId === userId) {
-        continue;
-      }
-      if (currentBidOrder.assetQuantity >= remainingQ) {
-        totalCost += remainingQ * currentBidOrder.orderPrice;
-        let avgPrice = totalCost / quantityToTrade;
-        return { avgPrice };
-      } else {
-        remainingQ -= currentBidOrder.assetQuantity;
-        totalCost += currentBidOrder.assetQuantity * currentBidOrder.orderPrice;
-        continue;
-      }
-    }
-  }
-  return null;
-}
-export function marketOrder(order: Order) {
-  const canMatchAll = checkOrder(order);
-  if (!canMatchAll) {
-    return null;
-  } else {
-    const remainingQ = fillOrder(order);
-    if (remainingQ === 0) {
-      return { filledQuantity: order.assetQuantity };
-    }
-    throw new Error(`Could not exchange ${remainingQ} amount of asset.`);
-  }
-}
 
-function checkOrder(order: Order) {
-  let remainingQ = order.assetQuantity;
-  if (order.orderSide === "BUY") {
-    for (const currentAskOrder of asks) {
-      if (currentAskOrder.userId === order.userId) {
-        continue;
-      }
-      if (currentAskOrder.orderPrice > order.orderPrice) {
-        return true;
-      }
-      if (currentAskOrder.assetQuantity > remainingQ) {
-        return true;
-      } else {
-        remainingQ -= currentAskOrder.assetQuantity;
-        continue;
-      }
-    }
-  } else {
-    for (const currentBidOrder of bids) {
-      if (currentBidOrder.userId === order.userId) {
-        continue;
-      }
-      if (currentBidOrder.orderPrice > order.orderPrice) {
-        return true;
-      }
-      if (currentBidOrder.assetQuantity > remainingQ) {
-        return true;
-      } else {
-        remainingQ -= currentBidOrder.assetQuantity;
-        continue;
-      }
-    }
-  }
-  return false;
-}
+// interface GetQuote {
+//   userId: UserId;
+//   quantityToTrade: Quantity;
+//   orderSide: OrderSide;
+// }
+// export function getQuote({ orderSide, quantityToTrade, userId }: GetQuote) {
+//   let remainingQ = quantityToTrade;
+//   let totalCost = 0;
+//   if (orderSide === "BUY") {
+//     for (const currentAskOrder of asks) {
+//       if (currentAskOrder.userId === userId) {
+//         continue;
+//       }
+//       if (currentAskOrder.assetQuantity >= remainingQ) {
+//         totalCost += remainingQ * currentAskOrder.orderPrice;
+//         let avgPrice = totalCost / quantityToTrade;
+//         return { quantityTradeable: quantityToTrade, avgPrice };
+//       } else {
+//         remainingQ -= currentAskOrder.assetQuantity;
+//         totalCost += currentAskOrder.assetQuantity * currentAskOrder.orderPrice;
+//         continue;
+//       }
+//     }
+//   } else if (orderSide === "SELL") {
+//     for (const currentBidOrder of bids) {
+//       if (currentBidOrder.userId === userId) {
+//         continue;
+//       }
+//       if (currentBidOrder.assetQuantity >= remainingQ) {
+//         totalCost += remainingQ * currentBidOrder.orderPrice;
+//         let avgPrice = totalCost / quantityToTrade;
+//         return { quantityTradeable: quantityToTrade, avgPrice };
+//       } else {
+//         remainingQ -= currentBidOrder.assetQuantity;
+//         totalCost += currentBidOrder.assetQuantity * currentBidOrder.orderPrice;
+//         continue;
+//       }
+//     }
+//   }
+//   return {
+//     quantityTradeable: quantityToTrade - remainingQ,
+//     avgPrice: totalCost / (quantityToTrade - remainingQ),
+//   };
+// }
+// export function marketOrder(order: Order) {
+//   const canMatchAll = checkOrder(order);
+//   if (!canMatchAll) {
+//     return null;
+//   } else {
+//     const remainingQ = fillOrder(order);
+//     if (remainingQ === 0) {
+//       return { filledQuantity: order.assetQuantity };
+//     }
+//     throw new Error(`Could not exchange ${remainingQ} amount of asset.`);
+//   }
+// }
+
+// function checkOrder(order: Order) {
+//   let remainingQ = order.assetQuantity;
+//   if (order.orderSide === "BUY") {
+//     for (const currentAskOrder of asks) {
+//       if (currentAskOrder.userId === order.userId) {
+//         continue;
+//       }
+//       if (currentAskOrder.orderPrice > order.orderPrice) {
+//         return true;
+//       }
+//       if (currentAskOrder.assetQuantity > remainingQ) {
+//         return true;
+//       } else {
+//         remainingQ -= currentAskOrder.assetQuantity;
+//         continue;
+//       }
+//     }
+//   } else {
+//     for (const currentBidOrder of bids) {
+//       if (currentBidOrder.userId === order.userId) {
+//         continue;
+//       }
+//       if (currentBidOrder.orderPrice > order.orderPrice) {
+//         return true;
+//       }
+//       if (currentBidOrder.assetQuantity > remainingQ) {
+//         return true;
+//       } else {
+//         remainingQ -= currentBidOrder.assetQuantity;
+//         continue;
+//       }
+//     }
+//   }
+//   return false;
+// }
