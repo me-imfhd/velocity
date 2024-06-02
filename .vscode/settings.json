@@ -1,6 +1,11 @@
 {
+  "rust-analyzer.linkedProjects": ["matching-engine-rs/Cargo.toml"],
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.inlayHints.typeHints.enable": false,
+  "editor.semanticHighlighting.enabled": false,
+  "rust-analyzer.lens.implementations.enable": false,
+
   "typescript.tsdk": "node_modules/typescript/lib",
-  "eslint.rules.customizations": [{ "rule": "*", "severity": "warn" }],
   "json.schemas": [
     {
       "fileMatch": ["tsconfig.*.json"],

@@ -40,3 +40,5 @@ yarn-error.log*
 .env
 .vercel
 .env*.local
+Cargo.lock
+target
