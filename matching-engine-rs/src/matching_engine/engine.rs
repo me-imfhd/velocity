@@ -51,9 +51,9 @@ fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Users, Vec<
 #[cfg(test)]
 pub mod tests {
     use std::sync::atomic::Ordering;
-
     use rust_decimal_macros::dec;
-    use crate::OrderSide;
+
+    use crate::matching_engine::orderbook::OrderSide;
 
     use super::*;
     #[test]

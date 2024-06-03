@@ -7,8 +7,7 @@ use std::{
 use rust_decimal_macros::dec;
 use rust_decimal::prelude::*;
 use std::{ clone, collections::HashMap };
-use crate::Exchange;
-use super::{ error::UserError, users::Users, Asset, Id, Quantity, ORDER_ID, TRADE_ID };
+use super::{ engine::Exchange, error::UserError, users::Users, Asset, Id, Quantity, ORDER_ID, TRADE_ID };
 
 #[derive(Debug)]
 pub struct Orderbook {
