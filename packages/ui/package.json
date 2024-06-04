@@ -47,7 +47,6 @@
     "tailwindcss": "3.3.2"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
     "@repo/tailwind-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@types/node": "20.8.0",
