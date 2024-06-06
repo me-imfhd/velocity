@@ -2,6 +2,7 @@
   "rust-analyzer.linkedProjects": ["matching-engine-rs/Cargo.toml"],
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.inlayHints.typeHints.enable": false,
+  "editor.inlayHints.enabled": "off",
   "editor.semanticHighlighting.enabled": false,
   "rust-analyzer.lens.implementations.enable": false,
 

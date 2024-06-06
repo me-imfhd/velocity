@@ -6,16 +6,26 @@ use std::{
 };
 use rust_decimal_macros::dec;
 use rust_decimal::prelude::*;
+use serde::{ Deserialize, Serialize };
 use std::{ clone, collections::HashMap };
-use super::{ engine::Exchange, error::UserError, users::Users, Asset, Id, Quantity, ORDER_ID, TRADE_ID };
+use super::{
+    engine::Exchange,
+    error::MatchingEngineErrors,
+    users::Users,
+    Asset,
+    Id,
+    Quantity,
+    ORDER_ID,
+    TRADE_ID,
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
     pub trades: Vec<Trade>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trade {
     id: Id,
     quantity: Quantity,
@@ -34,11 +44,34 @@ impl Orderbook {
     pub fn get_trades(&self) -> &Vec<Trade> {
         &self.trades
     }
+    pub fn get_quote(
+        &mut self,
+        order_side: &OrderSide,
+        mut order_quantity: Quantity,
+        users: &mut Users
+    ) -> Result<Decimal, MatchingEngineErrors> {
+        let sorted_orders = match order_side {
+            OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
+            OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
+        };
+        let mut orderbook_quote = dec!(0);
+        for limit_order in sorted_orders {
+            let total_quantity = limit_order.total_volume();
+            if total_quantity >= order_quantity {
+                orderbook_quote += order_quantity * limit_order.price;
+                return Ok(orderbook_quote);
+            }
+            orderbook_quote += total_quantity * limit_order.price;
+            order_quantity -= total_quantity;
+        }
+        Err(MatchingEngineErrors::AskedMoreThanTradeable)
+    }
     pub fn fill_market_order(&mut self, mut order: Order, users: &mut Users, exchange: &Exchange) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
             OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
         };
+        println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
             order = limit_order.fill_order(order, &mut self.trades, users, exchange, price);
@@ -57,8 +90,13 @@ impl Orderbook {
         let initial_quantity = order.quantity;
         match order.order_side {
             OrderSide::Ask => {
+                println!("Recieved an ask order");
                 let sorted_bids = &mut Orderbook::bid_limits(&mut self.bids);
                 let mut i = 0;
+                if sorted_bids.len() == 0 {
+                    self.add_limit_order(price, order);
+                    return;
+                }
                 while i < sorted_bids.len() {
                     if price > sorted_bids[i].price {
                         self.add_limit_order(price, order);
@@ -79,8 +117,13 @@ impl Orderbook {
                 }
             }
             OrderSide::Bid => {
+                println!("Recieved an bid order");
                 let sorted_asks = &mut Orderbook::ask_limits(&mut self.asks);
                 let mut i = 0;
+                if sorted_asks.len() == 0 {
+                    self.add_limit_order(price, order);
+                    return;
+                }
                 while i < sorted_asks.len() {
                     if price < sorted_asks[i].price {
                         self.add_limit_order(price, order);
@@ -103,6 +146,38 @@ impl Orderbook {
                 }
             }
         };
+    }
+    pub fn bids_by_user(&self, user_id: Id) -> Vec<Limit> {
+        let mut bids = &self.bids;
+        let mut user_limit_vec: Vec<Limit> = Vec::new();
+
+        for limit in bids.values() {
+            let mut user_limit_orders = Limit::new(limit.price);
+            for order in &limit.orders {
+                if order.user_id == user_id {
+                    user_limit_orders.orders.push(order.clone());
+                }
+            }
+            user_limit_vec.push(user_limit_orders);
+        }
+
+        user_limit_vec
+    }
+    pub fn asks_by_user(&self, user_id: Id) -> Vec<Limit> {
+        let mut asks = &self.asks;
+        let mut user_limit_vec: Vec<Limit> = Vec::new();
+
+        for limit in asks.values() {
+            let mut user_limit_orders = Limit::new(limit.price);
+            for order in &limit.orders {
+                if order.user_id == user_id {
+                    user_limit_orders.orders.push(order.clone());
+                }
+            }
+            user_limit_vec.push(user_limit_orders);
+        }
+
+        user_limit_vec
     }
     // sorted from lowest to highest
     pub fn ask_limits(asks: &mut HashMap<Price, Limit>) -> Vec<&mut Limit> {
@@ -144,13 +219,13 @@ impl Orderbook {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OrderSide {
     Bid,
     Ask,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub id: Id,
     pub user_id: Id,
@@ -187,7 +262,7 @@ impl Order {
     }
 }
 pub type Price = Decimal;
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Limit {
     pub price: Price,
     pub orders: Vec<Order>,
@@ -201,6 +276,7 @@ impl Limit {
         }
     }
     fn add_order(&mut self, order: Order) {
+        println!("Adding a new {:?} order to orderbook", &order.order_side);
         self.orders.push(order)
     }
     fn trade(
@@ -212,19 +288,19 @@ impl Limit {
         price: Price,
         is_market_maker: bool
     ) -> Trade {
-        // Create a new trade with the given parameters
-        TRADE_ID.fetch_add(1, Ordering::SeqCst);
-        let id = TRADE_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms(); // Assuming get_epoch_ms() is defined elsewhere
-
         // Perform the asset flips
+        users.unlock_amount(&exchange.base, user_id_1, base_quantity);
         users.withdraw(&exchange.base, base_quantity, user_id_1);
         users.deposit(&exchange.base, base_quantity, user_id_2);
 
+        users.unlock_amount(&exchange.quote, user_id_2, base_quantity * price);
         users.withdraw(&exchange.quote, base_quantity * price, user_id_2);
         users.deposit(&exchange.quote, base_quantity * price, user_id_1);
 
-        // Return the newly created trade
+        TRADE_ID.fetch_add(1, Ordering::SeqCst);
+        let id = TRADE_ID.load(Ordering::SeqCst);
+        let timestamp = get_epoch_ms(); 
+        println!("Trade occurred.");
         Trade {
             id,
             quantity: base_quantity,
@@ -241,9 +317,13 @@ impl Limit {
         exchange: &Exchange,
         exchange_price: Price
     ) -> Order {
-        let mut remaining_quantity = order.quantity;
+        let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
+        let mut indexes_to_remove: Vec<usize> = Vec::new();
         while i < self.orders.len() {
+            if remaining_quantity == dec!(0) {
+                break;
+            }
             let limit_order = &mut self.orders[i];
             match limit_order.quantity > remaining_quantity {
                 true => {
@@ -298,13 +378,13 @@ impl Limit {
                                 order.is_market_maker
                             ),
                     };
-                    // exchnage balance with limit_order.user_id and order.user_id
                     trades.insert(0, trade);
-                    limit_order.quantity = dec!(0);
+                    // indexes_to_remove.push(i);
+                    self.orders.remove(i);
+                    continue;
                 }
             }
             if order.is_filled() {
-                println!("Order filled");
                 break;
             }
             i += 1;
@@ -316,6 +396,6 @@ impl Limit {
             .iter()
             .map(|order| order.quantity)
             .reduce(|a, b| a + b)
-            .unwrap()
+            .unwrap_or(dec!(0))
     }
 }

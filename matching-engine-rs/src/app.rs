@@ -1,8 +1,12 @@
-use std::net::TcpListener;
+use std::{ net::TcpListener, sync::Mutex };
 
-use sqlx::PgPool;
+use actix_web::{ web::{ self, scope }, App, HttpServer };
 
-use crate::{ config::GlobalConfig, routes::health::health_check };
+use crate::{
+    config::GlobalConfig,
+    matching_engine::{ self, engine::MatchingEngine, users::Users },
+    routes::{ engine::{add_new_market, fill_limit_order, fill_market_order, get_asks, get_bids, get_quote, get_trades}, health::health_check, user::{ deposit, new_user, user_balance, withdraw } },
+};
 
 pub struct Application {
     port: u16,
@@ -27,9 +31,37 @@ impl Application {
     }
 }
 
+pub struct AppState {
+    pub users: Mutex<Users>,
+    pub matching_engine: Mutex<MatchingEngine>,
+}
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
-    let server = actix_web::HttpServer
-        ::new(move || { actix_web::App::new().service(health_check) })
+    let app_state = web::Data::new(AppState {
+        users: Mutex::new(Users::init()),
+        matching_engine: Mutex::new(MatchingEngine::init()),
+    });
+    let server = HttpServer::new(move || {
+        App::new()
+            .service(health_check)
+            .service(
+                scope("/api/v1")
+                    .app_data(app_state.clone())
+                    .service(
+                        scope("/users")
+                            .service(new_user)
+                            .service(user_balance)
+                            .service(deposit)
+                            .service(withdraw)
+                    )
+                    .service(add_new_market)
+                    .service(fill_limit_order)
+                    .service(fill_market_order)
+                    .service(get_trades)
+                    .service(get_asks)
+                    .service(get_bids)
+                    .service(get_quote)
+            )
+    })
         .listen(listener)?
         .run();
 

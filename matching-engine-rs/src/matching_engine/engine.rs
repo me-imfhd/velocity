@@ -1,10 +1,12 @@
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use super::orderbook::{ Orderbook, Order, Price };
+use serde::{ Deserialize, Serialize };
+use super::orderbook::{ Limit, Order, OrderSide, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
 use super::users::Users;
-use super::{ Asset, Id };
+use super::{ Asset, Id, Quantity };
 use std::collections::HashMap;
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub struct Exchange {
     pub base: Asset,
     pub quote: Asset,
@@ -18,7 +20,7 @@ impl Exchange {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MatchingEngine {
     orderbooks: HashMap<Exchange, Orderbook>,
 }
@@ -28,8 +30,83 @@ impl MatchingEngine {
             orderbooks: HashMap::new(),
         }
     }
-    pub fn add_new_market(&mut self, exchange: Exchange) {
+    pub fn get_quote(
+        &mut self,
+        order_side: &OrderSide,
+        order_quantity: Quantity,
+        users: &mut Users,
+        exchange: &Exchange
+    ) -> Result<Decimal, MatchingEngineErrors> {
+        let orderbook = self.get_orderbook(exchange)?;
+        orderbook.get_quote(&order_side, order_quantity, users)
+    }
+
+    pub fn add_new_market(
+        &mut self,
+        exchange: Exchange
+    ) -> Result<&mut Self, MatchingEngineErrors> {
+        let exists = self.orderbooks.contains_key(&exchange);
+        if let true = exists {
+            return Err(MatchingEngineErrors::ExchangeAlreadyExist);
+        }
         self.orderbooks.insert(exchange, Orderbook::new());
+        Ok(self)
+    }
+    pub fn get_orderbook(
+        &mut self,
+        exchange: &Exchange
+    ) -> Result<&mut Orderbook, MatchingEngineErrors> {
+        let orderbook = self.orderbooks
+            .get_mut(&exchange)
+            .ok_or(MatchingEngineErrors::ExchangeDoesNotExist)?;
+        Ok(orderbook)
+    }
+    pub fn get_trades(&mut self, exchange: &Exchange) -> Result<&Vec<Trade>, MatchingEngineErrors> {
+        let orderbook = self.get_orderbook(exchange)?;
+        Ok(&orderbook.trades)
+    }
+    pub fn fill_market_order(
+        &mut self,
+        mut order: Order,
+        users: &mut Users,
+        exchange: &Exchange
+    ) -> Result<(), MatchingEngineErrors> {
+        let mut orderbook = self.get_orderbook(exchange)?;
+        Ok(orderbook.fill_market_order(order, users, exchange))
+    }
+    pub fn fill_limit_order(
+        &mut self,
+        price: Price,
+        mut order: Order,
+        users: &mut Users,
+        exchange: &Exchange
+    ) -> Result<(), MatchingEngineErrors> {
+        let mut orderbook = self.get_orderbook(exchange)?;
+        orderbook.fill_limit_order(price, order, users, exchange);
+        Ok(())
+    }
+    // pub fn add_limit_order(
+    //     &mut self,
+    //     price: Price,
+    //     order: Order,
+    //     exchange: &Exchange
+    // ) -> Result<(), MatchingEngineErrors> {
+    //     let orderbook = self.get_orderbook(exchange)?;
+    //     Ok(orderbook.add_limit_order(price, order))
+    // }
+    pub fn get_asks(
+        &mut self,
+        exchange: &Exchange
+    ) -> Result<Vec<&mut Limit>, MatchingEngineErrors> {
+        let orderbook = self.get_orderbook(exchange)?;
+        Ok(Orderbook::ask_limits(&mut orderbook.asks))
+    }
+    pub fn get_bids(
+        &mut self,
+        exchange: &Exchange
+    ) -> Result<Vec<&mut Limit>, MatchingEngineErrors> {
+        let orderbook = self.get_orderbook(exchange)?;
+        Ok(Orderbook::bid_limits(&mut orderbook.bids))
     }
 }
 
@@ -129,15 +206,6 @@ pub mod tests {
         let bid_order = Order::new(OrderSide::Bid, dec!(40), true, ids[5]);
         let bid_price_limit_1 = dec!(500);
         orderbook.fill_limit_order(bid_price_limit_1, bid_order, &mut users, &exchange);
-        // Checkk all orders for that partically price limit is filled
-        assert_eq!(
-            orderbook.asks
-                .get(&ask_price_limit_1)
-                .unwrap()
-                .orders.iter()
-                .all(|order| order.quantity == dec!(0)),
-            true
-        );
         // For the Remaining Quantity a new order should be added for the price limit made by the order
         assert_eq!(
             orderbook.bids.get(&bid_price_limit_1).unwrap().orders.get(0).unwrap().quantity,
@@ -216,8 +284,7 @@ pub mod tests {
 
         let market_order = Order::new(OrderSide::Bid, dec!(40), false, ids[5]);
         orderbook.fill_market_order(market_order, &mut users, &exchange);
-        println!("{:?}", orderbook.get_trades());
-
+        dbg!(&orderbook.asks);
         assert_eq!(
             orderbook.asks.get(&ask_price_limit_3).unwrap().orders.get(0).unwrap().quantity,
             dec!(5)

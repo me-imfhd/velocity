@@ -1,5 +1,4 @@
 use std::fmt::format;
-use sqlx::{ postgres::PgConnectOptions, ConnectOptions };
 
 #[derive(serde::Deserialize, Clone)]
 pub struct GlobalConfig {

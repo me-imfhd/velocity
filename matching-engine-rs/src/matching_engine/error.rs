@@ -1,9 +1,11 @@
-#[derive(Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize)]
 pub enum MatchingEngineErrors {
-    OrderbookDoesNotExist(String)
-}
-#[derive(Debug)]
-pub enum UserError {
+    ExchangeDoesNotExist,
+    ExchangeAlreadyExist,
+    AskedMoreThanTradeable,
+    UserNotFound,
     AssetNotFound,
-    UserNotFound
+    OverWithdrawl
 }
