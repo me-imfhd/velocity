@@ -1,8 +1,8 @@
 "use client";
 import React, { useState } from "react";
-import { Button } from "@repo/ui/components";
-import { Orderbook } from "../components/orderbook-components";
-import { useOrderContext } from "../lib/hooks/order.hooks";
+import { Orderbook } from "./orderbook-components";
+import { useOrderContext } from "./order.hooks";
+import { Button } from "../components";
 
 export default function Page() {
   return (
