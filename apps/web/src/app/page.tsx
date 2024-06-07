@@ -1,11 +1,8 @@
 "use client";
 import React, { useState } from "react";
 import { Button } from "@repo/ui/components";
-import { Asset, UserId } from "@repo/api/src/cex/types";
 import { Orderbook } from "../components/orderbook-components";
 import { useOrderContext } from "../lib/hooks/order.hooks";
-import { getDepth, order } from "@repo/api/src/cex";
-import { toast } from "sonner";
 
 export default function Page() {
   return (
@@ -19,7 +16,7 @@ export default function Page() {
 }
 
 const OrderComponent = () => {
-  const asset: Asset = "SOL";
+  const asset = "SOL";
   const { isBid, setIsBid } = useOrderContext();
   return (
     <div className="flex flex-col w-[300px] border rounded-lg">
@@ -51,41 +48,12 @@ const OrderComponent = () => {
 };
 
 interface OrderFormProps {
-  asset: Asset;
+  asset: string;
 }
 
 const OrderForm = ({ asset }: OrderFormProps) => {
   const { isBid, isLimit, setIsLimit, quantity, price } = useOrderContext();
   const [orderValueIsUSDC, setOrderValueIsUSDC] = useState(true);
-  function handleSubmit() {
-    // assuming not making market orders
-    try {
-      if (isBid) {
-        const res = order({
-          asset,
-          assetQuantity: quantity,
-          FOK: false,
-          orderPrice: price,
-          orderSide: "BUY",
-          timestamp: new Date().getTime(),
-          userId: "1",
-        });
-      } else {
-        const res = order({
-          asset,
-          assetQuantity: quantity,
-          FOK: false,
-          orderPrice: price,
-          orderSide: "SELL",
-          timestamp: new Date().getTime(),
-          userId: "1",
-        });
-      }
-      const depth = getDepth();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
   return (
     <div className="flex flex-col gap-1 px-3 w-[300px]">
       <div className="flex gap-5">
@@ -102,7 +70,7 @@ const OrderForm = ({ asset }: OrderFormProps) => {
           </p>
         </div>
         <div
-          // onClick={() => setIsLimit(false)}
+          onClick={() => setIsLimit(false)}
           className="flex justify-center items-center py-2 cursor-not-allowed"
         >
           <p
@@ -116,7 +84,7 @@ const OrderForm = ({ asset }: OrderFormProps) => {
       </div>
       {isLimit ? (
         <div className="flex flex-col gap-2">
-          <OrderBalance userId="1" asset={isBid ? "USDC" : asset} />
+          <OrderBalance userId={1} asset={isBid ? "USDC" : asset} />
           <OrderPrice />
           <OrderQuantity asset={asset} />
         </div>
@@ -128,15 +96,12 @@ const OrderForm = ({ asset }: OrderFormProps) => {
           >
             Change Order Value
           </p>
-          <OrderBalance userId="1" asset={orderValueIsUSDC ? "USDC" : asset} />
+          <OrderBalance userId={1} asset={orderValueIsUSDC ? "USDC" : asset} />
           <MarketOrderQuantity asset={orderValueIsUSDC ? "USDC" : asset} />
         </div>
       )}
       {isLimit && <OrderEstimation />}
       <Button
-        onClick={() => {
-          handleSubmit();
-        }}
         variant="ghost"
         size="lg"
         className={`my-2 border rounded-xl ${
@@ -152,8 +117,8 @@ const OrderForm = ({ asset }: OrderFormProps) => {
 };
 
 interface OrderBalanceProps {
-  userId: UserId;
-  asset: Asset;
+  userId: number;
+  asset: string;
 }
 
 const OrderBalance = ({ asset }: OrderBalanceProps) => {
@@ -170,7 +135,7 @@ const OrderBalance = ({ asset }: OrderBalanceProps) => {
   );
 };
 
-const MarketOrderQuantity = ({ asset }: { asset: Asset }) => {
+const MarketOrderQuantity = ({ asset }: { asset: string }) => {
   const { marketOrderQuantity, setMarketOrderQuantity } = useOrderContext();
   return (
     <div className="flex flex-col gap-2">
@@ -226,7 +191,7 @@ const OrderPrice = () => {
     </div>
   );
 };
-const OrderQuantity = ({ asset }: { asset: Asset }) => {
+const OrderQuantity = ({ asset }: { asset: string }) => {
   const { quantity, setQuantity } = useOrderContext();
   return (
     <div className="flex flex-col gap-2">

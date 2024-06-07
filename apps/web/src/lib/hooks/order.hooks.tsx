@@ -1,7 +1,4 @@
 "use client";
-import { getAssetsLtsPrice, getDepth } from "@repo/api/src/cex";
-import { Price, Quantity } from "@repo/api/src/cex/types";
-import { getUser, user_asset_balance } from "@repo/api/src/cex/user";
 import {
   createContext,
   useState,
@@ -15,12 +12,12 @@ interface OrderContextType {
   setIsBid: Dispatch<SetStateAction<boolean>>;
   isLimit: boolean;
   setIsLimit: Dispatch<SetStateAction<boolean>>;
-  price: Price;
-  setPrice: Dispatch<SetStateAction<Price>>;
-  quantity: Quantity;
-  setQuantity: Dispatch<SetStateAction<Quantity>>;
-  marketOrderQuantity: Quantity | Price;
-  setMarketOrderQuantity: Dispatch<SetStateAction<Quantity | Price>>;
+  price: number;
+  setPrice: Dispatch<SetStateAction<number>>;
+  quantity: number;
+  setQuantity: Dispatch<SetStateAction<number>>;
+  marketOrderQuantity: number | number;
+  setMarketOrderQuantity: Dispatch<SetStateAction<number | number>>;
 }
 
 export const OrderContext = createContext<OrderContextType>(
@@ -31,7 +28,7 @@ interface OrderProviderProps {
   children: React.ReactNode;
 }
 export const OrderProvider = ({ children }: OrderProviderProps) => {
-  const ltsPrice = getAssetsLtsPrice("SOL");
+  const ltsPrice = 99;
   const [isBid, setIsBid] = useState(true);
   const [isLimit, setIsLimit] = useState(true);
   const [price, setPrice] = useState(ltsPrice);

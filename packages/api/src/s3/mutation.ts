@@ -11,7 +11,6 @@ import {
 import { S3Client } from "@aws-sdk/client-s3";
 import { preSignedUrlLimit } from "../rate-limit";
 import { TRPCError } from "@trpc/server";
-import { checkAuth } from "@repo/auth/server";
 
 const s3Client = new S3Client({
   credentials: {
@@ -23,7 +22,7 @@ const s3Client = new S3Client({
 // run this on server only
 "use server"; // for server actions
 export const getPresignedUrl = async () => {
-  const { id } = await checkAuth();
+  let id = "1"; // check auth and get id here
   const { success } = await preSignedUrlLimit.limit(id);
   if (!success) {
     throw new TRPCError({

@@ -1,5 +1,4 @@
 import axios from "axios";
-import { db } from "@repo/db";
 import { CLOUDFRONT_URL, IdType, throwTRPCError } from "../common";
 
 // call on client side
@@ -24,7 +23,7 @@ export const uploadImage = async (
     axios.post(preSignedUrl, formData);
 
     const image = `${CLOUDFRONT_URL}/${fields["key"]!}`;
-    await db.user.update({ where: { id: userId }, data: { image } });
+    // add this image uri to database
     return image;
   } catch (e) {
     return throwTRPCError(e);

@@ -1,6 +1,3 @@
-import { getAssetsLtsPrice, getDepth } from "@repo/api/src/cex";
-import { useOrderContext } from "../lib/hooks/order.hooks";
-
 export const Orderbook = () => {
   return (
     <div className="flex flex-col w-[300px] overflow-hidden border rounded-lg">
@@ -14,32 +11,33 @@ export const Orderbook = () => {
 };
 
 const OrderbookContent = () => {
-    const { orderbook } = useOrderContext();
-    const ltsPrice = getAssetsLtsPrice("SOL");
+  const price = 100;
+  const total = 10;
+  const ltsPrice = 99;
     return (
       <div className="flex flex-col grow overflow-y-hidden">
         <div className="flex flex-col h-full grow overflow-x-hidden">
           <div className="flex flex-col grow overflow-y-scroll max-h-[42rem] font-sans snap-y  ">
             <div className="flex flex-col-reverse">
-              {orderbook.askDepth.map(([price, total]) => (
+              {/* {orderbook.askDepth.map(([price, total]) => ( */}
                 <OrderbookEntry
                   key={`ask-${price}`}
                   price={price.toFixed(2)}
                   total={total}
                   type="ask"
                 />
-              ))}
+              {/* ))} */}
             </div>
             <OrderbookMidpoint price={ltsPrice} />
             <div className="flex flex-col">
-              {orderbook.bidDepth.map(([price, total]) => (
+              {/* {orderbook.bidDepth.map(([price, total]) => ( */}
                 <OrderbookEntry
                   key={`bid-${price}`}
                   price={price.toFixed(2)}
                   total={total}
                   type="bid"
                 />
-              ))}
+              {/* ))} */}
             </div>
           </div>
         </div>

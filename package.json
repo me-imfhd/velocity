@@ -1,5 +1,5 @@
 {
-  "name": "@meimfhd/velocity",
+  "name": "velocity",
   "version": "1.0.3",
   "author": "me-imfhd",
   "repository": {
@@ -15,28 +15,9 @@
     "node": ">=v18.18.0"
   },
   "packageManager": "pnpm@8.7.5",
-  "scripts": {
-    "build": "turbo run build",
-    "clean": "git clean -xdf node_modules",
-    "clean:workspaces": "turbo clean",
-    "db:generate": "turbo db:generate",
-    "db:migrate": "turbo db:migrate",
-    "db:migrate:deploy": "turbo db:migrate:deploy",
-    "db:push": "turbo db:push",
-    "db:studio": "turbo db:studio",
-    "dev": "turbo dev --parallel",
-    "format": "turbo format --continue -- --cache --cache-location='node_modules/.cache/.prettiercache'",
-    "format:fix": "turbo format --continue -- --write --cache --cache-location='node_modules/.cache/.prettiercache'",
-    "lint": "turbo lint --continue -- --cache --cache-location 'node_modules/.cache/.eslintcache' && manypkg check",
-    "lint:fix": "turbo lint --continue -- --fix --cache --cache-location 'node_modules/.cache/.eslintcache' && manypkg fix",
-    "typecheck": "turbo typecheck"
-  },
   "dependencies": {
-    "@manypkg/cli": "^0.21.0",
-    "@turbo/gen": "^1.10.14",
     "eslint": "^8.50.0",
     "prettier": "^3.0.3",
-    "turbo": "^1.10.14",
     "typescript": "^5.2.2"
   }
 }

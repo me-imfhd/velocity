@@ -1,7 +1,6 @@
 "use client";
 
 import { Button, Input, Label } from "@repo/ui/components";
-import { signIn } from "@repo/auth/react";
 import React, { useState } from "react";
 
 export function SignInForm() {
@@ -25,7 +24,6 @@ export function SignInForm() {
         disabled={loading}
         onClick={async () => {
           setLoading(true);
-          await signIn("email", { email, callbackUrl: "/" });
           setLoading(false);
         }}
         className={`w-full py-5 ${loading && "cursor-not-allowed"}`}

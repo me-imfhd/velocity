@@ -11,8 +11,6 @@
   "dependencies": {
     "dotenv-cli": "^7.2.1",
     "@repo/api": "workspace:*",
-    "@repo/auth": "workspace:*",
-    "@repo/db": "workspace:*",
     "@repo/tailwind-config": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tailwindcss/container-queries": "^0.1.1",
@@ -22,7 +20,6 @@
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.16",
     "next": "14.0.1",
-    "next-safe-action": "^6.2.0",
     "react": "^18",
     "react-dom": "^18",
     "@hookform/resolvers": "^3.4.2",

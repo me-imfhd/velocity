@@ -13,13 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components";
 import { Icons } from "@repo/ui/icons";
-import { Session } from "@repo/auth/server";
 
 export const UserProfileDropdown = ({
   user,
   initials,
 }: {
-  user: Session["user"];
+  user: any;
   initials: string;
 }) => {
   return (

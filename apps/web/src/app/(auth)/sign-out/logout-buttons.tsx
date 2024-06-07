@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useMounted } from "@/src/lib/hooks/use-mounted";
 import { Button, Skeleton, buttonVariants } from "@repo/ui/components";
-import { signOut } from "@repo/auth/react";
 import { Icons } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 
@@ -21,7 +20,6 @@ export const LogOutButtons = () => {
             disabled={isLoading}
             onClick={async () => {
               setIsLoading(true);
-              await signOut({ redirect: true, callbackUrl: "/" });
             }}
           >
             {isLoading && (
