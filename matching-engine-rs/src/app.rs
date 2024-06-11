@@ -1,11 +1,24 @@
 use std::{ net::TcpListener, sync::Mutex };
 
 use actix_web::{ web::{ self, scope }, App, HttpServer };
+use redis::Commands;
 
 use crate::{
     config::GlobalConfig,
     matching_engine::{ self, engine::MatchingEngine, users::Users },
-    routes::{ engine::{add_new_market, fill_limit_order, fill_market_order, get_asks, get_bids, get_quote, get_trades}, health::health_check, user::{ deposit, new_user, user_balance, withdraw } },
+    routes::{
+        engine::{
+            add_new_market,
+            fill_limit_order,
+            fill_market_order,
+            get_asks,
+            get_bids,
+            get_quote,
+            get_trades,
+        },
+        health::health_check,
+        user::{ deposit, new_user, user_balance, withdraw },
+    },
 };
 
 pub struct Application {

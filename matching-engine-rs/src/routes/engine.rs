@@ -68,9 +68,12 @@ pub async fn fill_limit_order(
                     required_balance: body.quantity,
                     available_balance,
                 });
-            }else {
+            } else {
                 users.lock_amount(&body.exchange.base, body.user_id, body.quantity);
-                println!("Locked Balance: {:?}", users.locked_balance(&body.exchange.base, body.user_id));
+                println!(
+                    "Locked Balance: {:?}",
+                    users.locked_balance(&body.exchange.base, body.user_id)
+                );
             }
         }
         OrderSide::Bid => {
@@ -86,7 +89,10 @@ pub async fn fill_limit_order(
                 });
             } else {
                 users.lock_amount(&body.exchange.quote, body.user_id, body.quantity * body.price);
-                println!("Locked Balance: {:?}", users.locked_balance(&body.exchange.quote, body.user_id));
+                println!(
+                    "Locked Balance: {:?}",
+                    users.locked_balance(&body.exchange.quote, body.user_id)
+                );
             }
         }
     }
@@ -94,6 +100,7 @@ pub async fn fill_limit_order(
     let price = body.price;
     let order_side = body.order_side.clone();
     let order = Order::new(order_side, body.quantity, true, body.user_id);
+    // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
     let exchange = matching_engine.fill_limit_order(price, order, &mut users, &body.exchange);
     if let Ok(matching_engine) = exchange {
         return actix_web::HttpResponse::Ok().json("Ok");
@@ -127,7 +134,10 @@ pub async fn fill_market_order(
     }
     match body.order_side {
         OrderSide::Ask => {
-            let user_base_quantity = users.open_balance(&body.exchange.base, body.user_id).ok().unwrap();
+            let user_base_quantity = users
+                .open_balance(&body.exchange.base, body.user_id)
+                .ok()
+                .unwrap();
             if &body.quantity > &user_base_quantity {
                 return actix_web::HttpResponse::BadRequest().json(InsufficientBalanceResponse {
                     message: "Not enough available balance".to_string(),
@@ -154,6 +164,7 @@ pub async fn fill_market_order(
         }
     }
     let order = Order::new(order_side, body.quantity, false, body.user_id);
+    // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
     let exchange = matching_engine.fill_market_order(order, &mut users, &body.exchange);
     if let Ok(matching_engine) = exchange {
         return actix_web::HttpResponse::Ok().json("Ok");

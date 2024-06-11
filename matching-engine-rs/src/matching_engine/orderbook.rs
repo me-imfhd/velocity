@@ -29,6 +29,7 @@ pub struct Orderbook {
 pub struct Trade {
     id: Id,
     quantity: Quantity,
+    quote_quantity: Quantity,
     is_market_maker: bool,
     timestamp: u128,
     price: Price,
@@ -299,13 +300,14 @@ impl Limit {
 
         TRADE_ID.fetch_add(1, Ordering::SeqCst);
         let id = TRADE_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms(); 
+        let timestamp = get_epoch_ms();
         println!("Trade occurred.");
         Trade {
             id,
             quantity: base_quantity,
             is_market_maker,
             timestamp,
+            quote_quantity: base_quantity * price,
             price,
         }
     }
@@ -319,7 +321,6 @@ impl Limit {
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
-        let mut indexes_to_remove: Vec<usize> = Vec::new();
         while i < self.orders.len() {
             if remaining_quantity == dec!(0) {
                 break;
@@ -351,6 +352,7 @@ impl Limit {
                                 order.is_market_maker
                             ),
                     };
+                    // 1) queue this, 2) update the order request db and then publish it.
                     trades.insert(0, trade);
                 }
                 false => {
@@ -378,9 +380,9 @@ impl Limit {
                                 order.is_market_maker
                             ),
                     };
-                    trades.insert(0, trade);
-                    // indexes_to_remove.push(i);
                     self.orders.remove(i);
+                    // 1) queue this, 2) update the order request db and then publish it.
+                    trades.insert(0, trade);
                     continue;
                 }
             }
