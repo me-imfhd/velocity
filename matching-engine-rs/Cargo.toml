@@ -33,3 +33,4 @@ log = "0.4.21"
 hex = "0.4.3"
 chrono = "0.4.38"
 serde_json = { version = "1.0.117", features = ["raw_value"] }
+redis = "0.25.4"

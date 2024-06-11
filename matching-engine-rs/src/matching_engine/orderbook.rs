@@ -192,6 +192,13 @@ impl Orderbook {
         bids.sort_by(|a, b| b.price.cmp(&a.price));
         bids
     }
+    pub fn recover_orderbook(
+        mut self,
+        redis_connection: redis::Connection,
+    ) -> Self {
+        // get asks and bids vector, map over them, insert them as inside self, return self
+        self
+    }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         match order.order_side {
             OrderSide::Bid => {
@@ -218,6 +225,12 @@ impl Orderbook {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OrderType {
+    Market,
+    Limit,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

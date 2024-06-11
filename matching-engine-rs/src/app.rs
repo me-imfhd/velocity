@@ -1,12 +1,10 @@
-use std::{ net::TcpListener, sync::Mutex };
+use std::{ collections::HashMap, net::TcpListener, sync::Mutex };
 
 use actix_web::{ web::{ self, scope }, App, HttpServer };
-use redis::Commands;
+use redis::{ Commands, Connection };
 
 use crate::{
-    config::GlobalConfig,
-    matching_engine::{ self, engine::MatchingEngine, users::Users },
-    routes::{
+    config::GlobalConfig, db::schema::UserSchema, matching_engine::{ self, engine::MatchingEngine, users::Users, Id }, routes::{
         engine::{
             add_new_market,
             fill_limit_order,
@@ -18,7 +16,7 @@ use crate::{
         },
         health::health_check,
         user::{ deposit, new_user, user_balance, withdraw },
-    },
+    }
 };
 
 pub struct Application {
@@ -47,11 +45,16 @@ impl Application {
 pub struct AppState {
     pub users: Mutex<Users>,
     pub matching_engine: Mutex<MatchingEngine>,
+    pub redis_connection: Mutex<Connection>,
 }
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
+    let client = redis::Client::open("redis://127.0.0.1:6379").expect("Could not create client.");
+    let mut connection = client.get_connection().expect("Could not connect to the client");
+    let redis_connection = Mutex::new(connection);
     let app_state = web::Data::new(AppState {
         users: Mutex::new(Users::init()),
         matching_engine: Mutex::new(MatchingEngine::init()),
+        redis_connection
     });
     let server = HttpServer::new(move || {
         App::new()
