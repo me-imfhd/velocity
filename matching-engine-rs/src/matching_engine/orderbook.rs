@@ -21,6 +21,7 @@ use super::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
+    pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
     pub trades: Vec<Trade>,
@@ -35,8 +36,9 @@ pub struct Trade {
     price: Price,
 }
 impl Orderbook {
-    pub fn new() -> Orderbook {
+    pub fn new(exchange: Exchange) -> Orderbook {
         Orderbook {
+            exchange,
             asks: HashMap::new(),
             bids: HashMap::new(),
             trades: Vec::new(),
@@ -192,12 +194,30 @@ impl Orderbook {
         bids.sort_by(|a, b| b.price.cmp(&a.price));
         bids
     }
-    pub fn recover_orderbook(
-        mut self,
-        redis_connection: redis::Connection,
-    ) -> Self {
-        // get asks and bids vector, map over them, insert them as inside self, return self
-        self
+    pub fn recover_orderbook(&mut self, redis_connection: &mut redis::Connection) {
+        let symbol = &self.exchange.symbol;
+        let bids_symbol = "orderbook:".to_string() + &symbol + ":bids";
+        let asks_symbol = "orderbook:".to_string() + &symbol + ":asks";
+        let bids_store_str = redis
+            ::cmd("GET")
+            .arg(bids_symbol)
+            .query::<String>(redis_connection)
+            .expect("Orderbook does not exist, invalid symbol");
+        let asks_store_str = redis
+            ::cmd("GET")
+            .arg(asks_symbol)
+            .query::<String>(redis_connection)
+            .expect("Orderbook does not exist, invalid symbol");
+        let mut bids_store: Vec<Limit> = serde_json::from_str(&bids_store_str).unwrap();
+        let mut asks_store: Vec<Limit> = serde_json::from_str(&asks_store_str).unwrap();
+        let mut asks = &mut self.asks;
+        let mut bids = &mut self.bids;
+        asks_store.iter_mut().for_each(|limit| {
+            asks.insert(limit.price, limit.clone());
+        });
+        bids_store.iter_mut().for_each(|limit| {
+            bids.insert(limit.price, limit.clone());
+        });
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         match order.order_side {

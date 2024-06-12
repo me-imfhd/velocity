@@ -1,6 +1,7 @@
 use std::{ borrow::BorrowMut, sync::Arc };
 
 use actix_web::{ body, web::{ self, Data, Json, Query } };
+use redis::Commands;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
@@ -23,8 +24,20 @@ pub async fn add_new_market(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let exchange = matching_engine.add_new_market(body.0);
+    let mut redis_connection = app_state.redis_connection.lock().unwrap();
+    let exchange = matching_engine.add_new_market(body.0.clone());
     if let Ok(matching_engine) = exchange {
+        let symbol = body.0.symbol;
+        let bids_key = "orderbook:".to_string() + &symbol + ":bids";
+        let asks_key = "orderbook:".to_string() + &symbol + ":asks";
+        // initally bids and asks are empty vec
+        redis
+            ::cmd("MSET")
+            .arg(bids_key)
+            .arg("[]")
+            .arg(asks_key)
+            .arg("[]")
+            .query::<String>(&mut redis_connection);
         return actix_web::HttpResponse::Ok().json("Created a new market successfully.");
     }
     actix_web::HttpResponse::Conflict().json(exchange.err())

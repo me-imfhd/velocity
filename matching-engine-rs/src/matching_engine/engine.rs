@@ -1,25 +1,47 @@
+use redis::{ Commands, FromRedisValue, Value };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
+use strum_macros::FromRepr;
+
+use crate::matching_engine::Symbol;
+
 use super::orderbook::{ Limit, Order, OrderSide, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
 use super::users::Users;
 use super::{ Asset, Id, Quantity };
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
+use std::ops::Deref;
+use std::str::FromStr;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub struct Exchange {
     pub base: Asset,
     pub quote: Asset,
+    pub symbol: String,
 }
 
 impl Exchange {
     pub fn new(base: Asset, quote: Asset) -> Exchange {
+        let base_string = base.to_string();
+        let quote_string = quote.to_string();
+        let symbol = format!("{}_{}", base_string, quote_string);
         Exchange {
             base,
             quote,
+            symbol
         }
     }
+    pub fn from_symbol(symbol: Symbol) -> Exchange {
+        let symbols: Vec<&str> = symbol.split("_").collect();
+        let base_str = symbols.get(0).unwrap();
+        let quote_str = symbols.get(1).unwrap();
+        let base = Asset::from_str(&base_str).expect("Incorrect symbol");
+        let quote = Asset::from_str(&quote_str).expect("Incorrect symbol");
+        Exchange::new(base, quote)
+    }
 }
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MatchingEngine {
     orderbooks: HashMap<Exchange, Orderbook>,
@@ -29,6 +51,19 @@ impl MatchingEngine {
         MatchingEngine {
             orderbooks: HashMap::new(),
         }
+    }
+    pub fn recover_all_orderbooks(&mut self, redis_connection: &mut redis::Connection) {
+        let mut orderbooks = &mut self.orderbooks;
+        let keys = redis_connection.keys::<&str, Vec<Symbol>>("orderbook:*:bids").unwrap();
+        keys.iter().for_each(|key| {
+            let symbol = key.split(":").collect::<Vec<&str>>().get(1).unwrap().to_string();
+            println!("Recovering {:?} orderbook...", symbol);
+            let exchange = Exchange::from_symbol(symbol);
+            let mut orderbook = Orderbook::new(exchange.clone());
+            orderbook.recover_orderbook(redis_connection);
+            orderbooks.insert(exchange, orderbook);
+        });
+        println!("\nOrderbook recovering complete.")
     }
     pub fn get_quote(
         &mut self,
@@ -49,7 +84,7 @@ impl MatchingEngine {
         if let true = exists {
             return Err(MatchingEngineErrors::ExchangeAlreadyExist);
         }
-        self.orderbooks.insert(exchange, Orderbook::new());
+        self.orderbooks.insert(exchange.clone(), Orderbook::new(exchange));
         Ok(self)
     }
     pub fn get_orderbook(
@@ -113,7 +148,7 @@ impl MatchingEngine {
 fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Users, Vec<Id>) {
     let mut engine = MatchingEngine::init();
     let exchange = Exchange::new(Asset::SOL, Asset::USDT);
-    let mut orderbook = Orderbook::new();
+    let mut orderbook = Orderbook::new(exchange.clone());
     engine.add_new_market(exchange.clone());
     let mut users = Users::init();
 
@@ -135,7 +170,7 @@ pub mod tests {
     use super::*;
     #[test]
     fn is_sorting_working() {
-        let mut orderbook = Orderbook::new();
+        let mut orderbook = Orderbook::new(Exchange::new(Asset::SOL, Asset::USDT));
         orderbook.add_limit_order(dec!(110), Order::new(OrderSide::Ask, dec!(20), true, 1));
         orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Ask, dec!(20), true, 2));
         orderbook.add_limit_order(dec!(99), Order::new(OrderSide::Ask, dec!(20), true, 3));

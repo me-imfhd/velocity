@@ -4,9 +4,14 @@ use redis::{ from_redis_value, ErrorKind, FromRedisValue, RedisError, Value };
 use rust_decimal::Decimal;
 use serde::{ Deserialize, Serialize };
 
-use crate::matching_engine::{ orderbook::{ OrderSide, OrderType, Price }, Asset, Id, Quantity };
+use crate::matching_engine::{
+    orderbook::{ OrderSide, OrderType, Price },
+    Asset,
+    Id,
+    Quantity,
+    Symbol,
+};
 
-pub type Symbol = String;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OrderSchema {
     pub id: Id,

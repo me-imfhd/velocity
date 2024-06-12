@@ -22,6 +22,19 @@ impl Users {
             users: HashMap::new(),
         }
     }
+    pub fn recover_users(&mut self, redis_connection: &mut redis::Connection) {
+        let user_store_str = redis::cmd("GET").arg("users").query::<String>(redis_connection);
+        match user_store_str {
+            Err(_) => {}
+            Ok(user_store_str) => {
+                let mut user_store: Vec<User> = serde_json::from_str(&user_store_str).unwrap();
+                let mut users = &mut self.users;
+                user_store.iter_mut().for_each(|user| {
+                    users.insert(user.id, user.clone());
+                });
+            }
+        }
+    }
     pub fn lock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity) {
         let user = self.users.get_mut(&user_id).unwrap();
         let mut locked_balance = user.locked_balance.get_mut(asset);
