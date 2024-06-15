@@ -1,5 +1,5 @@
 {
-  "rust-analyzer.linkedProjects": ["matching-engine-rs/Cargo.toml"],
+  "rust-analyzer.linkedProjects": ["matching-engine/Cargo.toml"],
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.inlayHints.typeHints.enable": false,
   "editor.inlayHints.enabled": "off",
