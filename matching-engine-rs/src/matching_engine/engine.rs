@@ -94,10 +94,6 @@ impl MatchingEngine {
             .ok_or(MatchingEngineErrors::ExchangeDoesNotExist)?;
         Ok(orderbook)
     }
-    pub fn get_trades(&mut self, exchange: &Exchange) -> Result<&Vec<Trade>, MatchingEngineErrors> {
-        let orderbook = self.get_orderbook(exchange)?;
-        Ok(&orderbook.trades)
-    }
     pub fn fill_market_order(
         &mut self,
         mut order: Order,
@@ -268,7 +264,6 @@ pub mod tests {
         orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange);
         // Checkk all orders for that partically price limit is filled
         // println!("{:?}", orderbook.bids.get(&bid_price_limit_1).unwrap().orders);
-        println!("{:?}", orderbook.trades);
         assert_eq!(
             orderbook.bids
                 .get(&bid_price_limit_1)

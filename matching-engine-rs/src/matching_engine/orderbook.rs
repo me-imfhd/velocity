@@ -23,7 +23,6 @@ pub struct Orderbook {
     pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
-    pub trades: Vec<Trade>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trade {
@@ -40,11 +39,7 @@ impl Orderbook {
             exchange,
             asks: HashMap::new(),
             bids: HashMap::new(),
-            trades: Vec::new(),
         }
-    }
-    pub fn get_trades(&self) -> &Vec<Trade> {
-        &self.trades
     }
     pub fn get_quote(
         &mut self,
@@ -75,7 +70,7 @@ impl Orderbook {
         println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
-            order = limit_order.fill_order(order, &mut self.trades, exchange, price);
+            order = limit_order.fill_order(order, exchange, price);
             if order.is_filled() {
                 break;
             }
@@ -104,7 +99,6 @@ impl Orderbook {
                     }
                     order = sorted_bids[i].fill_order(
                         order,
-                        &mut self.trades,
                         exchange,
                         price
                     );
@@ -131,7 +125,6 @@ impl Orderbook {
                     let price = sorted_asks[i].price.clone();
                     order = sorted_asks[i].fill_order(
                         order,
-                        &mut self.trades,
                         exchange,
                         price
                     );
@@ -341,7 +334,6 @@ impl Limit {
     fn fill_order(
         &mut self,
         mut order: Order,
-        trades: &mut Vec<Trade>,
         exchange: &Exchange,
         exchange_price: Price
     ) -> Order {

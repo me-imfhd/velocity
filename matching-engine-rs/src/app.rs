@@ -16,7 +16,6 @@ use crate::{
             get_asks,
             get_bids,
             get_quote,
-            get_trades,
         },
         health::health_check,
     },
@@ -68,7 +67,6 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
                     .service(add_new_market)
                     .service(fill_limit_order)
                     .service(fill_market_order)
-                    .service(get_trades)
                     .service(get_asks)
                     .service(get_bids)
                     .service(get_quote)
