@@ -11,7 +11,6 @@ use std::{ clone, collections::HashMap };
 use super::{
     engine::Exchange,
     error::MatchingEngineErrors,
-    users::Users,
     Asset,
     Id,
     Quantity,
@@ -51,7 +50,6 @@ impl Orderbook {
         &mut self,
         order_side: &OrderSide,
         mut order_quantity: Quantity,
-        users: &mut Users
     ) -> Result<Decimal, MatchingEngineErrors> {
         let sorted_orders = match order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
@@ -69,7 +67,7 @@ impl Orderbook {
         }
         Err(MatchingEngineErrors::AskedMoreThanTradeable)
     }
-    pub fn fill_market_order(&mut self, mut order: Order, users: &mut Users, exchange: &Exchange) {
+    pub fn fill_market_order(&mut self, mut order: Order, exchange: &Exchange) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
             OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
@@ -77,7 +75,7 @@ impl Orderbook {
         println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
-            order = limit_order.fill_order(order, &mut self.trades, users, exchange, price);
+            order = limit_order.fill_order(order, &mut self.trades, exchange, price);
             if order.is_filled() {
                 break;
             }
@@ -87,7 +85,6 @@ impl Orderbook {
         &mut self,
         price: Price,
         mut order: Order,
-        users: &mut Users,
         exchange: &Exchange
     ) {
         let initial_quantity = order.quantity;
@@ -108,7 +105,6 @@ impl Orderbook {
                     order = sorted_bids[i].fill_order(
                         order,
                         &mut self.trades,
-                        users,
                         exchange,
                         price
                     );
@@ -136,7 +132,6 @@ impl Orderbook {
                     order = sorted_asks[i].fill_order(
                         order,
                         &mut self.trades,
-                        users,
                         exchange,
                         price
                     );
@@ -313,42 +308,40 @@ impl Limit {
         println!("Adding a new {:?} order to orderbook", &order.order_side);
         self.orders.push(order)
     }
-    fn trade(
-        users: &mut Users,
-        user_id_1: Id,
-        user_id_2: Id,
-        exchange: &Exchange,
-        base_quantity: Quantity,
-        price: Price,
-        is_market_maker: bool
-    ) -> Trade {
-        // Perform the asset flips
-        users.unlock_amount(&exchange.base, user_id_1, base_quantity);
-        users.withdraw(&exchange.base, base_quantity, user_id_1);
-        users.deposit(&exchange.base, base_quantity, user_id_2);
+    // fn trade(
+    //     user_id_1: Id,
+    //     user_id_2: Id,
+    //     exchange: &Exchange,
+    //     base_quantity: Quantity,
+    //     price: Price,
+    //     is_market_maker: bool
+    // ) -> Trade {
+    //     // Perform the asset flips
+    //     users.unlock_amount(&exchange.base, user_id_1, base_quantity);
+    //     users.withdraw(&exchange.base, base_quantity, user_id_1);
+    //     users.deposit(&exchange.base, base_quantity, user_id_2);
 
-        users.unlock_amount(&exchange.quote, user_id_2, base_quantity * price);
-        users.withdraw(&exchange.quote, base_quantity * price, user_id_2);
-        users.deposit(&exchange.quote, base_quantity * price, user_id_1);
+    //     users.unlock_amount(&exchange.quote, user_id_2, base_quantity * price);
+    //     users.withdraw(&exchange.quote, base_quantity * price, user_id_2);
+    //     users.deposit(&exchange.quote, base_quantity * price, user_id_1);
 
-        TRADE_ID.fetch_add(1, Ordering::SeqCst);
-        let id = TRADE_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms();
-        println!("Trade occurred.");
-        Trade {
-            id,
-            quantity: base_quantity,
-            is_market_maker,
-            timestamp,
-            quote_quantity: base_quantity * price,
-            price,
-        }
-    }
+    //     TRADE_ID.fetch_add(1, Ordering::SeqCst);
+    //     let id = TRADE_ID.load(Ordering::SeqCst);
+    //     let timestamp = get_epoch_ms();
+    //     println!("Trade occurred.");
+    //     Trade {
+    //         id,
+    //         quantity: base_quantity,
+    //         is_market_maker,
+    //         timestamp,
+    //         quote_quantity: base_quantity * price,
+    //         price,
+    //     }
+    // }
     fn fill_order(
         &mut self,
         mut order: Order,
         trades: &mut Vec<Trade>,
-        users: &mut Users,
         exchange: &Exchange,
         exchange_price: Price
     ) -> Order {
@@ -363,59 +356,59 @@ impl Limit {
                 true => {
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
-                    let trade = match order.order_side {
-                        OrderSide::Bid =>
-                            Limit::trade(
-                                users,
-                                limit_order.user_id,
-                                order.user_id,
-                                exchange,
-                                remaining_quantity,
-                                exchange_price,
-                                order.is_market_maker
-                            ),
-                        OrderSide::Ask =>
-                            Limit::trade(
-                                users,
-                                order.user_id,
-                                limit_order.user_id,
-                                exchange,
-                                remaining_quantity,
-                                exchange_price,
-                                order.is_market_maker
-                            ),
-                    };
                     // 1) queue this, 2) update the order request db and then publish it.
-                    trades.insert(0, trade);
+                    // let trade = match order.order_side {
+                    //     OrderSide::Bid =>
+                    //         Limit::trade(
+                    //             users,
+                    //             limit_order.user_id,
+                    //             order.user_id,
+                    //             exchange,
+                    //             remaining_quantity,
+                    //             exchange_price,
+                    //             order.is_market_maker
+                    //         ),
+                    //     OrderSide::Ask =>
+                    //         Limit::trade(
+                    //             users,
+                    //             order.user_id,
+                    //             limit_order.user_id,
+                    //             exchange,
+                    //             remaining_quantity,
+                    //             exchange_price,
+                    //             order.is_market_maker
+                    //         ),
+                    // };
+                    // trades.insert(0, trade);
                 }
                 false => {
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
-                    let trade = match order.order_side {
-                        OrderSide::Bid =>
-                            Limit::trade(
-                                users,
-                                limit_order.user_id,
-                                order.user_id,
-                                exchange,
-                                limit_order.quantity,
-                                exchange_price,
-                                order.is_market_maker
-                            ),
-                        OrderSide::Ask =>
-                            Limit::trade(
-                                users,
-                                order.user_id,
-                                limit_order.user_id,
-                                exchange,
-                                limit_order.quantity,
-                                exchange_price,
-                                order.is_market_maker
-                            ),
-                    };
-                    self.orders.remove(i);
                     // 1) queue this, 2) update the order request db and then publish it.
-                    trades.insert(0, trade);
+                    // let trade = match order.order_side {
+                    //     OrderSide::Bid =>
+                    //         Limit::trade(
+                    //             users,
+                    //             limit_order.user_id,
+                    //             order.user_id,
+                    //             exchange,
+                    //             limit_order.quantity,
+                    //             exchange_price,
+                    //             order.is_market_maker
+                    //         ),
+                    //     OrderSide::Ask =>
+                    //         Limit::trade(
+                    //             users,
+                    //             order.user_id,
+                    //             limit_order.user_id,
+                    //             exchange,
+                    //             limit_order.quantity,
+                    //             exchange_price,
+                    //             order.is_market_maker
+                    //         ),
+                    // };
+                    // trades.insert(0, trade);
+                    self.orders.remove(i);
                     continue;
                 }
             }

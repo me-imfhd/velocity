@@ -8,7 +8,6 @@ use strum_macros::{ EnumIter, EnumString };
 pub mod orderbook;
 pub mod engine;
 pub mod error;
-pub mod users;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, EnumIter, Serialize, Deserialize, EnumStringify)]
 pub enum Asset {

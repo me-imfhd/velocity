@@ -8,7 +8,6 @@ use crate::matching_engine::Symbol;
 
 use super::orderbook::{ Limit, Order, OrderSide, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
-use super::users::Users;
 use super::{ Asset, Id, Quantity };
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
@@ -69,11 +68,10 @@ impl MatchingEngine {
         &mut self,
         order_side: &OrderSide,
         order_quantity: Quantity,
-        users: &mut Users,
         exchange: &Exchange
     ) -> Result<Decimal, MatchingEngineErrors> {
         let orderbook = self.get_orderbook(exchange)?;
-        orderbook.get_quote(&order_side, order_quantity, users)
+        orderbook.get_quote(&order_side, order_quantity)
     }
 
     pub fn add_new_market(
@@ -103,21 +101,19 @@ impl MatchingEngine {
     pub fn fill_market_order(
         &mut self,
         mut order: Order,
-        users: &mut Users,
         exchange: &Exchange
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        Ok(orderbook.fill_market_order(order, users, exchange))
+        Ok(orderbook.fill_market_order(order, exchange))
     }
     pub fn fill_limit_order(
         &mut self,
         price: Price,
         mut order: Order,
-        users: &mut Users,
         exchange: &Exchange
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        orderbook.fill_limit_order(price, order, users, exchange);
+        orderbook.fill_limit_order(price, order, exchange);
         Ok(())
     }
     // pub fn add_limit_order(
@@ -145,19 +141,14 @@ impl MatchingEngine {
     }
 }
 
-fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Users, Vec<Id>) {
+fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>) {
     let mut engine = MatchingEngine::init();
     let exchange = Exchange::new(Asset::SOL, Asset::USDT);
     let mut orderbook = Orderbook::new(exchange.clone());
     engine.add_new_market(exchange.clone());
-    let mut users = Users::init();
 
-    let ids: Vec<_> = (0..6).map(|_| users.new_user()).collect();
-    for id in &ids {
-        users.deposit(&Asset::USDT, dec!(1_000_000), *id);
-        users.deposit(&Asset::SOL, dec!(100), *id);
-    }
-    (engine, exchange, orderbook, users, ids)
+    let ids: Vec<_> = [1,2,3,4,5,6,7,8].to_vec();
+    (engine, exchange, orderbook, ids)
 }
 
 #[cfg(test)]
@@ -193,7 +184,7 @@ pub mod tests {
     }
     #[test]
     fn adds_to_orderbook_if_didnot_match() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
         // dummy limit orders in orderbook
         orderbook.add_limit_order(dec!(110), Order::new(OrderSide::Ask, dec!(20), true, ids[0]));
         orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Ask, dec!(20), true, ids[2]));
@@ -205,17 +196,17 @@ pub mod tests {
         orderbook.add_limit_order(dec!(101), Order::new(OrderSide::Bid, dec!(20), true, ids[2]));
 
         let bob_order = Order::new(OrderSide::Bid, dec!(10), true, ids[4]);
-        orderbook.fill_limit_order(dec!(50), bob_order, &mut users, &exchange);
+        orderbook.fill_limit_order(dec!(50), bob_order, &exchange);
         assert_eq!(orderbook.bids.contains_key(&dec!(50)), true); // failed to match at best ask(88) so it should be added to orderbook
 
         let alice_order = Order::new(OrderSide::Ask, dec!(10), true, ids[5]);
-        orderbook.fill_limit_order(dec!(201), alice_order, &mut users, &exchange);
+        orderbook.fill_limit_order(dec!(201), alice_order, &exchange);
         assert_eq!(orderbook.asks.contains_key(&dec!(201)), true); // failed to match at best bid(101) so it should be added to orderbook
     }
 
     #[test]
     fn if_matched_but_not_filled_bid_order() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
 
         let ask_price_limit_1 = dec!(200);
         let ask_price_limit_2 = dec!(400);
@@ -240,7 +231,7 @@ pub mod tests {
 
         let bid_order = Order::new(OrderSide::Bid, dec!(40), true, ids[5]);
         let bid_price_limit_1 = dec!(500);
-        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &mut users, &exchange);
+        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &exchange);
         // For the Remaining Quantity a new order should be added for the price limit made by the order
         assert_eq!(
             orderbook.bids.get(&bid_price_limit_1).unwrap().orders.get(0).unwrap().quantity,
@@ -249,7 +240,7 @@ pub mod tests {
     }
     #[test]
     fn if_matched_but_not_filled_ask_order() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
 
         let bid_price_limit_1 = dec!(500);
         let bid_price_limit_2 = dec!(400);
@@ -274,7 +265,7 @@ pub mod tests {
 
         let ask_order = Order::new(OrderSide::Ask, dec!(40), true, ids[5]);
         let ask_price_limit_1 = dec!(300);
-        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &mut users, &exchange);
+        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange);
         // Checkk all orders for that partically price limit is filled
         // println!("{:?}", orderbook.bids.get(&bid_price_limit_1).unwrap().orders);
         println!("{:?}", orderbook.trades);
@@ -294,7 +285,7 @@ pub mod tests {
     }
     #[test]
     fn fill_market_order() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
 
         let ask_price_limit_1 = dec!(200);
         let ask_price_limit_2 = dec!(400);
@@ -318,218 +309,12 @@ pub mod tests {
         );
 
         let market_order = Order::new(OrderSide::Bid, dec!(40), false, ids[5]);
-        orderbook.fill_market_order(market_order, &mut users, &exchange);
+        orderbook.fill_market_order(market_order, &exchange);
         dbg!(&orderbook.asks);
         assert_eq!(
             orderbook.asks.get(&ask_price_limit_3).unwrap().orders.get(0).unwrap().quantity,
             dec!(5)
         );
         assert_eq!(orderbook.bids.is_empty(), true);
-    }
-
-    #[test]
-    fn check_balance_limit_order_bid() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
-
-        let ask_price_limit_1 = dec!(200);
-        let ask_price_limit_2 = dec!(400);
-        let ask_price_limit_3 = dec!(600);
-        // dummy limit orders in orderbook
-        orderbook.add_limit_order(
-            ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(20), true, ids[1])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[2])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_2,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[3])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_3,
-            Order::new(OrderSide::Ask, dec!(10), true, ids[4])
-        );
-
-        let bid_order = Order::new(OrderSide::Bid, dec!(40), true, ids[5]);
-        let bid_price_limit_1 = dec!(500);
-        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &mut users, &exchange);
-
-        {
-            // askers
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[1]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_1 * dec!(20))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[1]).unwrap(), &(dec!(100) - dec!(20)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[2]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_1 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[2]).unwrap(), &(dec!(100) - dec!(5)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[3]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_2 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[3]).unwrap(), &(dec!(100) - dec!(5)));
-
-            // order will not get matched in this case
-            assert_eq!(users.balance(&Asset::USDT, ids[4]).unwrap(), &dec!(1_000_000));
-            assert_eq!(users.balance(&Asset::SOL, ids[4]).unwrap(), &dec!(100));
-        }
-        {
-            // bidder
-            assert_eq!(users.balance(&Asset::SOL, ids[5]).unwrap(), &(dec!(100) + dec!(30)));
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[5]).unwrap(),
-                &(
-                    dec!(1_000_000) -
-                    (ask_price_limit_1 * dec!(20) +
-                        ask_price_limit_1 * dec!(5) +
-                        ask_price_limit_2 * dec!(5))
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn check_balance_limit_order_ask() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
-
-        let bid_price_limit_1 = dec!(500);
-        let bid_price_limit_2 = dec!(400);
-        let bid_price_limit_3 = dec!(200);
-        // dummy limit orders in orderbook
-        orderbook.add_limit_order(
-            bid_price_limit_1,
-            Order::new(OrderSide::Bid, dec!(20), true, ids[1])
-        );
-        orderbook.add_limit_order(
-            bid_price_limit_1,
-            Order::new(OrderSide::Bid, dec!(5), true, ids[2])
-        );
-        orderbook.add_limit_order(
-            bid_price_limit_2,
-            Order::new(OrderSide::Bid, dec!(5), true, ids[3])
-        );
-        orderbook.add_limit_order(
-            bid_price_limit_3,
-            Order::new(OrderSide::Bid, dec!(10), true, ids[4])
-        );
-
-        let ask_order = Order::new(OrderSide::Ask, dec!(40), true, ids[5]);
-        let ask_price_limit_1 = dec!(300);
-        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &mut users, &exchange);
-
-        {
-            // bidders
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[1]).unwrap(),
-                &(dec!(1_000_000) - ask_price_limit_1 * dec!(20))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[1]).unwrap(), &(dec!(100) + dec!(20)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[2]).unwrap(),
-                &(dec!(1_000_000) - ask_price_limit_1 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[2]).unwrap(), &(dec!(100) + dec!(5)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[3]).unwrap(),
-                &(dec!(1_000_000) - ask_price_limit_1 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[3]).unwrap(), &(dec!(100) + dec!(5)));
-
-            // order will not get matched in this case
-            assert_eq!(users.balance(&Asset::USDT, ids[4]).unwrap(), &dec!(1_000_000));
-            assert_eq!(users.balance(&Asset::SOL, ids[4]).unwrap(), &dec!(100));
-        }
-        {
-            // asker
-            assert_eq!(users.balance(&Asset::SOL, ids[5]).unwrap(), &(dec!(100) - dec!(30)));
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[5]).unwrap(),
-                &(
-                    dec!(1_000_000) +
-                    (ask_price_limit_1 * dec!(20) +
-                        ask_price_limit_1 * dec!(5) +
-                        ask_price_limit_1 * dec!(5))
-                )
-            );
-        }
-    }
-    #[test]
-    fn check_balance_market_order() {
-        let (mut engine, exchange, mut orderbook, mut users, ids) = setup_engine_and_users();
-
-        let ask_price_limit_1 = dec!(200);
-        let ask_price_limit_2 = dec!(400);
-        let ask_price_limit_3 = dec!(600);
-        // dummy limit orders in orderbook
-        orderbook.add_limit_order(
-            ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(20), true, ids[1])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[2])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_2,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[3])
-        );
-        orderbook.add_limit_order(
-            ask_price_limit_3,
-            Order::new(OrderSide::Ask, dec!(15), true, ids[4])
-        );
-
-        let market_order = Order::new(OrderSide::Bid, dec!(40), false, ids[5]);
-        orderbook.fill_market_order(market_order, &mut users, &exchange);
-
-        {
-            // askers
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[1]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_1 * dec!(20))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[1]).unwrap(), &(dec!(100) - dec!(20)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[2]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_1 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[2]).unwrap(), &(dec!(100) - dec!(5)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[3]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_2 * dec!(5))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[3]).unwrap(), &(dec!(100) - dec!(5)));
-
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[4]).unwrap(),
-                &(dec!(1_000_000) + ask_price_limit_3 * dec!(10))
-            );
-            assert_eq!(users.balance(&Asset::SOL, ids[4]).unwrap(), &(dec!(100) - dec!(10)));
-        }
-
-        {
-            // taker
-            assert_eq!(users.balance(&Asset::SOL, ids[5]).unwrap(), &(dec!(100) + dec!(40)));
-            assert_eq!(
-                users.balance(&Asset::USDT, ids[5]).unwrap(),
-                &(
-                    dec!(1_000_000) -
-                    (ask_price_limit_1 * dec!(20) +
-                        ask_price_limit_1 * dec!(5) +
-                        ask_price_limit_2 * dec!(5) +
-                        ask_price_limit_3 * dec!(10))
-                )
-            );
-        }
     }
 }

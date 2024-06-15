@@ -11,7 +11,6 @@ use crate::{
     matching_engine::{
         engine::Exchange,
         orderbook::{ Order, OrderSide, Price },
-        users::Users,
         Asset,
         Id,
         Quantity,
@@ -64,57 +63,11 @@ pub async fn fill_limit_order(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let mut users = app_state.users.lock().unwrap();
-    let exists = users.does_exist(body.user_id);
-    if exists == false {
-        return actix_web::HttpResponse::NotFound().json("User Not Found");
-    }
-    match body.order_side {
-        OrderSide::Ask => {
-            let available_balance = users
-                .open_balance(&body.exchange.base, body.user_id)
-                .unwrap_or(dec!(0));
-            if &body.quantity > &available_balance {
-                return actix_web::HttpResponse::BadRequest().json(InsufficientBalanceResponse {
-                    message: "Not enough available balance".to_string(),
-                    asset: body.exchange.base,
-                    required_balance: body.quantity,
-                    available_balance,
-                });
-            } else {
-                users.lock_amount(&body.exchange.base, body.user_id, body.quantity);
-                println!(
-                    "Locked Balance: {:?}",
-                    users.locked_balance(&body.exchange.base, body.user_id)
-                );
-            }
-        }
-        OrderSide::Bid => {
-            let available_balance = users
-                .open_balance(&body.exchange.quote, body.user_id)
-                .unwrap_or(dec!(0));
-            if &body.price * body.quantity > available_balance {
-                return actix_web::HttpResponse::BadRequest().json(InsufficientBalanceResponse {
-                    message: "Not enough available balance".to_string(),
-                    asset: body.exchange.quote,
-                    required_balance: body.quantity * body.price,
-                    available_balance,
-                });
-            } else {
-                users.lock_amount(&body.exchange.quote, body.user_id, body.quantity * body.price);
-                println!(
-                    "Locked Balance: {:?}",
-                    users.locked_balance(&body.exchange.quote, body.user_id)
-                );
-            }
-        }
-    }
-
     let price = body.price;
     let order_side = body.order_side.clone();
     let order = Order::new(order_side, body.quantity, true, body.user_id);
     // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
-    let exchange = matching_engine.fill_limit_order(price, order, &mut users, &body.exchange);
+    let exchange = matching_engine.fill_limit_order(price, order, &body.exchange);
     if let Ok(matching_engine) = exchange {
         return actix_web::HttpResponse::Ok().json("Ok");
     }
@@ -135,50 +88,15 @@ pub async fn fill_market_order(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let mut users = app_state.users.lock().unwrap();
-    let exists = users.does_exist(body.user_id);
     let order_side = body.order_side.clone();
-    let quote = matching_engine.get_quote(&order_side, body.quantity, &mut users, &body.exchange);
+    let quote = matching_engine.get_quote(&order_side, body.quantity, &body.exchange);
     if let Err(err) = quote {
         return actix_web::HttpResponse::BadRequest().json(err);
     }
-    if exists == false {
-        return actix_web::HttpResponse::NotFound().json("User Not Found");
-    }
-    match body.order_side {
-        OrderSide::Ask => {
-            let user_base_quantity = users
-                .open_balance(&body.exchange.base, body.user_id)
-                .ok()
-                .unwrap();
-            if &body.quantity > &user_base_quantity {
-                return actix_web::HttpResponse::BadRequest().json(InsufficientBalanceResponse {
-                    message: "Not enough available balance".to_string(),
-                    asset: body.exchange.base,
-                    required_balance: body.quantity,
-                    available_balance: user_base_quantity,
-                });
-            }
-        }
-        OrderSide::Bid => {
-            let user_quote_balance = users
-                .open_balance(&body.exchange.quote, body.user_id)
-                .ok()
-                .unwrap();
-            let quote_amount = quote.ok().unwrap();
-            if quote_amount > user_quote_balance {
-                return actix_web::HttpResponse::BadRequest().json(InsufficientBalanceResponse {
-                    message: "Not enough available balance".to_string(),
-                    asset: body.exchange.quote,
-                    required_balance: quote_amount,
-                    available_balance: user_quote_balance,
-                });
-            }
-        }
-    }
+
     let order = Order::new(order_side, body.quantity, false, body.user_id);
     // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
-    let exchange = matching_engine.fill_market_order(order, &mut users, &body.exchange);
+    let exchange = matching_engine.fill_market_order(order, &body.exchange);
     if let Ok(matching_engine) = exchange {
         return actix_web::HttpResponse::Ok().json("Ok");
     }
@@ -194,11 +112,9 @@ pub struct Quote {
 #[actix_web::get("/quote")]
 pub async fn get_quote(body: Query<Quote>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let mut users = app_state.users.lock().unwrap();
     let quote = matching_engine.get_quote(
         &body.order_side,
         body.quantity,
-        &mut users,
         &Exchange::new(body.base, body.quote)
     );
     if let Ok(quote) = quote {
