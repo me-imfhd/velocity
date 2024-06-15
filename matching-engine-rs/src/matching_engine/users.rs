@@ -22,20 +22,26 @@ impl Users {
             users: HashMap::new(),
         }
     }
-    pub fn recover_users(&mut self, redis_connection: &mut redis::Connection) {
-        let user_store_str = redis::cmd("GET").arg("users").query::<String>(redis_connection);
-        match user_store_str {
-            Err(_) => {}
-            Ok(user_store_str) => {
-                let mut user_store: Vec<User> = serde_json::from_str(&user_store_str).unwrap();
-                let mut users = &mut self.users;
-                user_store.iter_mut().for_each(|user| {
-                    users.insert(user.id, user.clone());
-                });
+    pub fn recover_users(&mut self, redis_connection: &mut redis::Connection) -> Result<(),()> {
+        println!("Recovering users...");
+        let users_keys = redis::cmd("KEYS").arg("users:*").query::<Vec<String>>(redis_connection);
+        if users_keys.is_err() {
+            return Err(());
+        };
+        let users_keys = users_keys.unwrap();
+        for key in users_keys {
+            let user_id = key.split(":").last().unwrap().parse::<Id>().unwrap();
+            let user_data = redis::cmd("GET").arg(key).query::<String>(redis_connection);
+            if user_data.is_err() {
+                return Err(());
             }
+            let user = serde_json::from_str::<User>(user_data.unwrap().as_str()).unwrap();
+            self.recover_user(user);
+            println!("Recovered user_id : {}", user_id);
         }
+        Ok(())
     }
-    pub fn lock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity) {
+    pub fn lock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity)-> &User {
         let user = self.users.get_mut(&user_id).unwrap();
         let mut locked_balance = user.locked_balance.get_mut(asset);
         match locked_balance {
@@ -47,11 +53,13 @@ impl Users {
                 balance += quantity;
             }
         }
+        user
     }
-    pub fn unlock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity) {
+    pub fn unlock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity) ->&User {
         let user = self.users.get_mut(&user_id).unwrap();
         let mut locked_balance = user.locked_balance.get_mut(asset).unwrap();
         locked_balance -= quantity;
+        user
     }
     pub fn does_exist(&self, user_id: Id) -> bool {
         self.users.contains_key(&user_id)
@@ -74,12 +82,15 @@ impl Users {
         });
         id
     }
+    pub fn recover_user(&mut self, user: User) {
+        self.users.insert(user.id, user);
+    }
     pub fn deposit(
         &mut self,
         asset: &Asset,
         quantity: Quantity,
         user_id: Id
-    ) -> Result<(), MatchingEngineErrors> {
+    ) -> Result<&User, MatchingEngineErrors> {
         let mut user = self.users.get_mut(&user_id).ok_or(MatchingEngineErrors::UserNotFound)?;
         let mut assets_balance = user.balance.get_mut(asset);
         match assets_balance {
@@ -90,14 +101,14 @@ impl Users {
                 balance += quantity;
             }
         }
-        Ok(())
+        Ok(user)
     }
     pub fn withdraw(
         &mut self,
         asset: &Asset,
         quantity: Quantity,
         user_id: Id
-    ) -> Result<(), MatchingEngineErrors> {
+    ) -> Result<&User, MatchingEngineErrors> {
         let mut user = self.users.get_mut(&user_id).ok_or(MatchingEngineErrors::UserNotFound)?;
         let mut assets_balance = user.balance
             .get_mut(asset)
@@ -106,7 +117,7 @@ impl Users {
             return Err(MatchingEngineErrors::OverWithdrawl);
         }
         assets_balance -= quantity;
-        Ok(())
+        Ok(user)
     }
     pub fn locked_balance(
         &self,
