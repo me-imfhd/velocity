@@ -12,7 +12,7 @@ use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use super::{ enums::{ AssetEn, OrderSideEn, OrderStatusEn, OrderTypeEn }, ORDER_ID, TRADE_ID, USER_ID };
+use super::{ enums::{ AssetEn, OrderSideEn, OrderStatusEn, OrderTypeEn }, get_epoch_ms, ORDER_ID, TRADE_ID, USER_ID };
 
 pub type Id = i64;
 pub type Symbol = String;
@@ -63,54 +63,12 @@ pub struct OrderSchema {
     pub order_status: OrderStatus,
     pub timestamp: i64,
 }
-impl OrderSchema {
-    pub fn new(
-        user_id: Id,
-        initial_quantity: Quantity,
-        order_side: OrderSideEn,
-        order_type: OrderTypeEn,
-        symbol: Symbol
-    ) -> OrderSchema {
-        ORDER_ID.fetch_add(1, Ordering::SeqCst);
-        let id = ORDER_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms();
-        OrderSchema {
-            id: id as i64,
-            user_id,
-            filled_quantity: 0.0,
-            initial_quantity,
-            order_side: order_side.to_string(),
-            order_status: OrderStatusEn::Processing.to_string(),
-            order_type: order_type.to_string(),
-            symbol,
-            timestamp: timestamp as i64,
-        }
-    }
-}
+
 #[derive(Debug, Deserialize, Serialize, SerializeRow)]
 pub struct UserSchema {
     pub id: Id,
     pub balance: HashMap<Asset, Quantity>,
     pub locked_balance: HashMap<Asset, Quantity>,
-}
-impl UserSchema {
-    pub fn new() -> UserSchema{
-        USER_ID.fetch_add(1, Ordering::SeqCst);
-        let id = USER_ID.load(Ordering::SeqCst);
-        let mut balance: HashMap<Asset, Quantity> = HashMap::new();
-        let mut locked_balance: HashMap<Asset, Quantity> = HashMap::new();
-        for asset in AssetEn::iter() {
-            balance.insert(asset.to_string(), 0.0);
-        }
-        for asset in AssetEn::iter() {
-            locked_balance.insert(asset.to_string(), 0.0);
-        }
-        UserSchema {
-            id: id as i64,
-            balance,
-            locked_balance,
-        }
-    }
 }
 #[derive(Debug, Serialize, Deserialize,  SerializeRow)]
 pub struct TradeSchema {
@@ -121,24 +79,7 @@ pub struct TradeSchema {
     pub price: Price,
     pub timestamp: i64,
 }
-impl TradeSchema {
-    pub fn new(is_market_maker: bool, price: Price, quantity: Quantity) -> TradeSchema {
-        TRADE_ID.fetch_add(1, Ordering::SeqCst);
-        let id = TRADE_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms();
-        let quote_quantity =
-            Decimal::from_f32_retain(price).unwrap() * Decimal::from_f32_retain(quantity).unwrap();
-        let quote_quantity = Decimal::to_f32(&quote_quantity).unwrap();
-        TradeSchema {
-            id: id as i64,
-            quantity,
-            quote_quantity,
-            is_market_maker,
-            price,
-            timestamp: timestamp as i64,
-        }
-    }
-}
+
 #[derive(Debug, Deserialize, Serialize,  SerializeRow)]
 pub struct TickerSchema {
     pub symbol: Symbol,
@@ -149,20 +90,6 @@ pub struct TickerSchema {
     pub high_price: f32,
     pub low_price: f32,
     pub last_price: f32,
-}
-impl TickerSchema {
-    pub fn new(symbol: Symbol) -> TickerSchema{
-        TickerSchema{
-            symbol,
-            base_volume: 0.0,
-            high_price: 0.0,
-            last_price: 0.0,
-            low_price: 0.0,
-            price_change: 0.0,
-            price_change_percent: 0.0,
-            quote_volume: 0.0
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize,  SerializeRow)]
@@ -177,30 +104,5 @@ pub struct MarketSchema {
     pub min_quantity: f32,
     pub step_size: f32,
 }
-impl MarketSchema {
-    pub fn new(
-        symbol: Symbol,
-        max_price: f32,
-        min_price: f32,
-        tick_size: f32,
-        max_quantity: f32,
-        min_quantity: f32,
-        step_size: f32
-    ) -> MarketSchema {
-        let exchange = Exchange::from_symbol(symbol.clone());
-        MarketSchema {
-            symbol,
-            base: exchange.base.to_string(),
-            quote: exchange.quote.to_string(),
-            max_price,
-            min_price,
-            tick_size,
-            max_quantity,
-            min_quantity,
-            step_size,
-        }
-    }
-}
-fn get_epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
-}
+
+
