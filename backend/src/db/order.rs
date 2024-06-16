@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use super::{enums::*, get_epoch_ms, schema::*, ORDER_ID};
+use super::{ enums::*, get_epoch_ms, schema::*, ORDER_ID };
 
 impl OrderSchema {
     pub fn new(

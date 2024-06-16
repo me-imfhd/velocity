@@ -1,4 +1,4 @@
-use super::schema::{Exchange, MarketSchema, Symbol};
+use super::schema::{ Exchange, MarketSchema, Symbol };
 
 impl MarketSchema {
     pub fn new(

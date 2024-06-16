@@ -7,12 +7,18 @@ use std::{
 use bigdecimal::{ FromPrimitive, ToPrimitive };
 use enum_stringify::EnumStringify;
 use rust_decimal::Decimal;
-use scylla::SerializeRow ;
+use scylla::SerializeRow;
 use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use super::{ enums::{ AssetEn, OrderSideEn, OrderStatusEn, OrderTypeEn }, get_epoch_ms, ORDER_ID, TRADE_ID, USER_ID };
+use super::{
+    enums::{ AssetEn, OrderSideEn, OrderStatusEn, OrderTypeEn },
+    get_epoch_ms,
+    ORDER_ID,
+    TRADE_ID,
+    USER_ID,
+};
 
 pub type Id = i64;
 pub type Symbol = String;
@@ -51,7 +57,7 @@ impl Exchange {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize,  SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow)]
 pub struct OrderSchema {
     pub id: Id,
     pub user_id: Id,
@@ -70,7 +76,7 @@ pub struct UserSchema {
     pub balance: HashMap<Asset, Quantity>,
     pub locked_balance: HashMap<Asset, Quantity>,
 }
-#[derive(Debug, Serialize, Deserialize,  SerializeRow)]
+#[derive(Debug, Serialize, Deserialize, SerializeRow)]
 pub struct TradeSchema {
     pub id: Id,
     pub quantity: Quantity,
@@ -80,7 +86,7 @@ pub struct TradeSchema {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize,  SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow)]
 pub struct TickerSchema {
     pub symbol: Symbol,
     pub base_volume: f32,
@@ -92,7 +98,7 @@ pub struct TickerSchema {
     pub last_price: f32,
 }
 
-#[derive(Debug, Deserialize, Serialize,  SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow)]
 pub struct MarketSchema {
     pub symbol: Symbol,
     pub base: Asset,
@@ -104,5 +110,3 @@ pub struct MarketSchema {
     pub min_quantity: f32,
     pub step_size: f32,
 }
-
-
