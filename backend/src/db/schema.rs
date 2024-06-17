@@ -7,7 +7,7 @@ use std::{
 use bigdecimal::{ FromPrimitive, ToPrimitive };
 use enum_stringify::EnumStringify;
 use rust_decimal::Decimal;
-use scylla::SerializeRow;
+use scylla::{ FromRow, SerializeRow };
 use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -70,7 +70,7 @@ pub struct OrderSchema {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
+#[derive(Debug, Clone, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct UserSchema {
     pub id: Id,
     pub balance: HashMap<Asset, Quantity>,

@@ -5,16 +5,6 @@ use crate::result::Result;
 use super::ScyllaDb;
 
 impl ScyllaDb {
-    pub async fn create_session(uri: &str) -> Result<ScyllaDb> {
-        let session = SessionBuilder::new().known_node(uri).build().await.map_err(From::from);
-        match session {
-            Err(err) => Err(err),
-            Ok(session) =>
-                Ok(ScyllaDb {
-                    session,
-                }),
-        }
-    }
     pub async fn initialize(&self) -> Result<()> {
         self.create_keyspace().await?;
         self.create_user_table().await?;

@@ -1,4 +1,6 @@
-use super::schema::{ Exchange, MarketSchema, Symbol };
+use scylla::transport::errors::QueryError;
+
+use super::{schema::{ Exchange, MarketSchema, Symbol }, ScyllaDb};
 
 impl MarketSchema {
     pub fn new(
@@ -22,5 +24,26 @@ impl MarketSchema {
             min_quantity,
             step_size,
         }
+    }
+}
+
+impl ScyllaDb{
+    pub async fn new_market(&self, market: MarketSchema) -> Result<(), QueryError> {
+        let s =
+            r#"
+            INSERT INTO keyspace_1.market_table (
+                symbol,
+                base,
+                quote,
+                max_price,
+                min_price,
+                tick_size,
+                max_quantity,
+                min_quantity,
+                step_size
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        "#;
+        let res = self.session.query(s, market).await?;
+        Ok(())
     }
 }

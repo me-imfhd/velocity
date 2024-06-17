@@ -1,19 +1,15 @@
-use std::{ borrow::BorrowMut, collections::HashMap, sync::atomic::Ordering };
+use std::{ borrow::BorrowMut, collections::HashMap, error::Error, sync::atomic::Ordering };
 
+use scylla::transport::errors::QueryError;
 use strum::IntoEnumIterator;
 
 use super::{
-    add,
-    enums::AssetEn,
-    from_f32,
-    schema::{ Asset, Quantity, UserSchema },
-    sub,
-    to_f32,
-    USER_ID,
+    add, enums::AssetEn, from_f32, schema::{ Asset, Quantity, UserSchema }, sub, to_f32, ScyllaDb, USER_ID
 };
 pub enum UserError {
     OverWithdrawl,
     AssetNotFound,
+    UserNotFound
 }
 impl UserSchema {
     pub fn new() -> UserSchema {
@@ -82,5 +78,38 @@ impl UserSchema {
         let locked_balance = self.locked_balance(asset)?;
         let balance = self.balance(asset)?;
         Ok(balance - locked_balance)
+    }
+}
+
+impl ScyllaDb {
+    pub async fn new_user(&self, user: UserSchema) -> Result<(), QueryError> {
+        let s =
+            r#"
+            INSERT INTO keyspace_1.user_table (
+                id,
+                balance,
+                locked_balance
+            ) VALUES (?, ?, ?);
+        "#;
+        let res = self.session.query(s, user).await?;
+        Ok(())
+    }
+    pub async fn get_user(&self, user_id: i64) -> Result<UserSchema, Box<dyn Error>> {
+        let s =
+            r#"
+            SELECT
+                id,
+                balance,
+                locked_balance
+            FROM keyspace_1.user_table
+            WHERE id = ? ;
+        "#;
+        let res = self.session.query(s, (user_id,)).await?;
+        let mut users = res.rows_typed::<UserSchema>()?;
+        let user = users
+            .next()
+            .transpose()?
+            .ok_or(QueryError::InvalidMessage("User does not exist in db".to_string()))?;
+        Ok(user)
     }
 }

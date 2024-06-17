@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 #[derive(serde::Deserialize, Clone)]
 pub struct GlobalConfig {
     pub application: ApplicationConfig,

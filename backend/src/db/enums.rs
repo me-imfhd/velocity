@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 
 #[derive(Debug, Deserialize, Serialize, EnumStringify)]
 pub enum OrderStatusEn {
-    Processing,
+    InProgress,
     Filled,
     PartiallyFilled,
     Failed,
