@@ -47,23 +47,55 @@ impl Exchange {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, EnumStringify)]
+#[derive(Debug, Deserialize, Serialize, EnumStringify, EnumIter)]
 pub enum OrderStatus {
     InProgress,
     Filled,
     PartiallyFilled,
     Failed,
 }
-#[derive(Debug, Deserialize, Serialize, EnumStringify)]
+impl OrderStatus {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in OrderStatus::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
+}
+#[derive(Debug, Deserialize, Serialize, EnumStringify, EnumIter)]
 pub enum OrderSide {
     Bid,
     Ask,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, EnumStringify)]
+impl OrderSide {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in OrderSide::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, EnumStringify, EnumIter)]
 pub enum OrderType {
     Market,
     Limit,
+}
+impl OrderType {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in OrderType::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, EnumIter, Serialize, Deserialize, EnumStringify)]
 pub enum Asset {
@@ -88,6 +120,7 @@ pub struct Order {
     pub id: Id,
     pub user_id: Id,
     pub symbol: Symbol,
+    pub price: Price,
     pub initial_quantity: Quantity,
     pub filled_quantity: Quantity,
     pub order_type: OrderType,

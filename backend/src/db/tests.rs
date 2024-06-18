@@ -1,6 +1,6 @@
 use std::{ f32::INFINITY, ops::Deref };
 use rust_decimal_macros::dec;
-use schema::{ Asset, Market, Order, OrderSide, OrderType, Ticker, Trade, User };
+use schema::{ Asset, Market, Order, OrderSide, OrderStatus, OrderType, Ticker, Trade, User };
 use super::*;
 #[tokio::test]
 async fn is_able_to_create_tables() {
@@ -24,7 +24,14 @@ async fn insert_tables_all() {
         .unwrap();
     scylla_db
         .new_order(
-            Order::new(1, dec!(100.0), OrderSide::Ask, OrderType::Limit, "SOL_USDT".to_string())
+            Order::new(
+                1,
+                dec!(100.0),
+                dec!(1000),
+                OrderSide::Ask,
+                OrderType::Limit,
+                "SOL_USDT".to_string()
+            )
         ).await
         .unwrap();
     scylla_db.new_ticker(Ticker::new("SOL_USDT".to_string())).await.unwrap();
@@ -71,6 +78,27 @@ async fn update_market() {
 
     let updated_balance = updated_market.min_price;
     assert_eq!(updated_balance, amount + dec!(0.01));
+}
+#[tokio::test]
+async fn update_order() {
+    let order = Order::new(
+        1,
+        dec!(100.0),
+        dec!(1000),
+        OrderSide::Ask,
+        OrderType::Limit,
+        "SOL_USDT".to_string()
+    );
+    let scylla_db = init().await;
+    let amount = dec!(90);
+    scylla_db.new_order(order).await.unwrap();
+    let mut order = scylla_db.get_order(1).await.unwrap();
+    order.filled_quantity += amount;
+    order.order_status = OrderStatus::PartiallyFilled;
+    scylla_db.update_order(&mut order).await.unwrap();
+
+    let updated_order = scylla_db.get_order(1).await.unwrap();
+    assert_eq!(updated_order.order_status.to_string(), OrderStatus::PartiallyFilled.to_string());
 }
 
 async fn init() -> ScyllaDb {
