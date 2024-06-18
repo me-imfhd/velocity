@@ -12,32 +12,22 @@ use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use super::{
-    enums::{ AssetEn, OrderSideEn, OrderStatusEn, OrderTypeEn },
-    get_epoch_ms,
-    ORDER_ID,
-    TRADE_ID,
-    USER_ID,
-};
+use super::{ get_epoch_ms, ORDER_ID, TRADE_ID, USER_ID };
 
 pub type Id = i64;
 pub type Symbol = String;
-pub type Quantity = f32; // Convert to decimal before performing calculations
-pub type Price = f32;
-pub type Asset = String;
-pub type OrderType = String;
-pub type OrderSide = String;
-pub type OrderStatus = String;
+pub type Quantity = Decimal;
+pub type Price = Decimal;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub struct Exchange {
-    pub base: AssetEn,
-    pub quote: AssetEn,
+    pub base: Asset,
+    pub quote: Asset,
     pub symbol: Symbol,
 }
 
 impl Exchange {
-    pub fn new(base: AssetEn, quote: AssetEn) -> Exchange {
+    pub fn new(base: Asset, quote: Asset) -> Exchange {
         let base_string = base.to_string();
         let quote_string = quote.to_string();
         let symbol = format!("{}_{}", base_string, quote_string);
@@ -51,14 +41,50 @@ impl Exchange {
         let symbols: Vec<&str> = symbol.split("_").collect();
         let base_str = symbols.get(0).unwrap();
         let quote_str = symbols.get(1).unwrap();
-        let base = AssetEn::from_str(&base_str).expect("Incorrect symbol");
-        let quote = AssetEn::from_str(&quote_str).expect("Incorrect symbol");
+        let base = Asset::from_str(&base_str).expect("Incorrect symbol");
+        let quote = Asset::from_str(&quote_str).expect("Incorrect symbol");
         Exchange::new(base, quote)
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
-pub struct OrderSchema {
+#[derive(Debug, Deserialize, Serialize, EnumStringify)]
+pub enum OrderStatus {
+    InProgress,
+    Filled,
+    PartiallyFilled,
+    Failed,
+}
+#[derive(Debug, Deserialize, Serialize, EnumStringify)]
+pub enum OrderSide {
+    Bid,
+    Ask,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, EnumStringify)]
+pub enum OrderType {
+    Market,
+    Limit,
+}
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, EnumIter, Serialize, Deserialize, EnumStringify)]
+pub enum Asset {
+    USDT,
+    BTC,
+    SOL,
+    ETH,
+}
+impl Asset {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in Asset::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Order {
     pub id: Id,
     pub user_id: Id,
     pub symbol: Symbol,
@@ -70,14 +96,14 @@ pub struct OrderSchema {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, SerializeRow, FromRow)]
-pub struct UserSchema {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct User {
     pub id: Id,
     pub balance: HashMap<Asset, Quantity>,
     pub locked_balance: HashMap<Asset, Quantity>,
 }
-#[derive(Debug, Serialize, Deserialize, SerializeRow)]
-pub struct TradeSchema {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Trade {
     pub id: Id,
     pub quantity: Quantity,
     pub quote_quantity: Quantity,
@@ -86,27 +112,27 @@ pub struct TradeSchema {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
-pub struct TickerSchema {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Ticker {
     pub symbol: Symbol,
-    pub base_volume: f32,
-    pub quote_volume: f32,
-    pub price_change: f32,
-    pub price_change_percent: f32,
-    pub high_price: f32,
-    pub low_price: f32,
-    pub last_price: f32,
+    pub base_volume: Quantity,
+    pub quote_volume: Quantity,
+    pub price_change: Quantity,
+    pub price_change_percent: Quantity,
+    pub high_price: Quantity,
+    pub low_price: Quantity,
+    pub last_price: Quantity,
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
-pub struct MarketSchema {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Market {
     pub symbol: Symbol,
     pub base: Asset,
     pub quote: Asset,
-    pub max_price: f32,
-    pub min_price: f32,
-    pub tick_size: f32,
-    pub max_quantity: f32,
-    pub min_quantity: f32,
-    pub step_size: f32,
+    pub max_price: Quantity,
+    pub min_price: Quantity,
+    pub tick_size: Quantity,
+    pub max_quantity: Quantity,
+    pub min_quantity: Quantity,
+    pub step_size: Quantity,
 }

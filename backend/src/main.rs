@@ -1,6 +1,6 @@
 use std::io::Result;
 
-use backend::{app::{self, Application}, config::get_config};
+use backend::{ app::Application, config::get_config };
 
 #[tokio::main]
 async fn main() -> Result<()> {
