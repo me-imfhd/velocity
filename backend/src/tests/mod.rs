@@ -1,7 +1,7 @@
-use std::{ f32::INFINITY, ops::Deref };
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use schema::{ Asset, Market, Order, OrderSide, OrderStatus, OrderType, Ticker, Trade, User };
-use super::*;
+
+use crate::db::{schema::*, ScyllaDb};
 
 async fn init() -> ScyllaDb {
     let uri = "127.0.0.1:9042";
@@ -52,7 +52,7 @@ async fn get_trade() {
     let id = scylla_db.new_trade_id().await.unwrap();
     let trade = Trade::new(id, true, dec!(10.21), dec!(20.1));
     scylla_db.new_trade(trade).await.unwrap();
-    let mut trade = scylla_db.get_trade(id).await.unwrap();
+    let trade = scylla_db.get_trade(id).await.unwrap();
     assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1) );
 }
 #[tokio::test]

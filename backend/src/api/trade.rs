@@ -1,9 +1,9 @@
-use std::{ error::Error, sync::atomic::Ordering };
+use std::error::Error;
 
 use rust_decimal::prelude::*;
 use scylla::transport::errors::QueryError;
 
-use super::{
+use crate::db::{
     get_epoch_ms,
     schema::{ Price, Quantity, Trade },
     scylla_tables::ScyllaTrade,
@@ -60,7 +60,7 @@ impl ScyllaDb {
             ) VALUES (?, ?, ?, ?, ?, ?);
         "#;
         let trade = trade.to_scylla_trade();
-        let res = self.session.query(s, trade).await?;
+        self.session.query(s, trade).await?;
         Ok(())
     }
     pub async fn get_trade(&self, trade_id: i64) -> Result<Trade, Box<dyn Error>> {

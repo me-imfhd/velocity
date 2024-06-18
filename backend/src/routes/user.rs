@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use actix_web::{ web::Data, HttpResponse };
 
 use crate::{ app::AppState, db::schema::User };
@@ -12,7 +10,7 @@ pub async fn new_user(app_state: Data<AppState>) -> HttpResponse {
     let user_created = u.clone();
     let user = s_db.new_user(u).await;
     match user {
-        Ok(user) => HttpResponse::Created().json(user_created),
+        Ok(_) => HttpResponse::Created().json(user_created),
         Err(_) => HttpResponse::InternalServerError().json("Database is down"),
     }
 }

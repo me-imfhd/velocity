@@ -1,5 +1,3 @@
-use scylla::SessionBuilder;
-
 use crate::result::Result;
 
 use super::ScyllaDb;
@@ -7,13 +5,6 @@ use std::collections::HashMap;
 
 use scylla::{ FromRow, SerializeRow };
 use serde::{ Deserialize, Serialize };
-
-pub type Id = i64;
-pub type Symbol = String;
-pub type Asset = String;
-pub type OrderType = String;
-pub type OrderSide = String;
-pub type OrderStatus = String;
 
 impl ScyllaDb {
     pub async fn initialize(&self) -> Result<()> {
@@ -138,27 +129,27 @@ impl ScyllaDb {
 
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaOrder {
-    pub id: Id,
-    pub user_id: Id,
-    pub symbol: Symbol,
+    pub id: i64,
+    pub user_id: i64,
+    pub symbol: String,
     pub price: String,
     pub initial_quantity: String,
     pub filled_quantity: String,
-    pub order_type: OrderType,
-    pub order_side: OrderSide,
-    pub order_status: OrderStatus,
+    pub order_type: String,
+    pub order_side: String,
+    pub order_status: String,
     pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaUser {
-    pub id: Id,
-    pub balance: HashMap<Asset, String>,
-    pub locked_balance: HashMap<Asset, String>,
+    pub id: i64,
+    pub balance: HashMap<String, String>,
+    pub locked_balance: HashMap<String, String>,
 }
 #[derive(Debug, Serialize, Deserialize, SerializeRow, FromRow)]
 pub struct ScyllaTrade {
-    pub id: Id,
+    pub id: i64,
     pub quantity: String,
     pub quote_quantity: String,
     pub is_market_maker: bool,
@@ -168,7 +159,7 @@ pub struct ScyllaTrade {
 
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaTicker {
-    pub symbol: Symbol,
+    pub symbol: String,
     pub base_volume: String,
     pub quote_volume: String,
     pub price_change: String,
@@ -180,9 +171,9 @@ pub struct ScyllaTicker {
 
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaMarket {
-    pub symbol: Symbol,
-    pub base: Asset,
-    pub quote: Asset,
+    pub symbol: String,
+    pub base: String,
+    pub quote: String,
     pub max_price: String,
     pub min_price: String,
     pub tick_size: String,

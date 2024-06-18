@@ -1,7 +1,6 @@
-use std::{ collections::HashMap, net::TcpListener, sync::Mutex };
+use std::{ net::TcpListener, sync::Mutex };
 
 use actix_web::{ web::{ self, scope }, App, HttpServer };
-use serde::{ Deserialize, Serialize };
 
 use crate::{ config::GlobalConfig, db::ScyllaDb, routes::ping::ping };
 
@@ -38,9 +37,7 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
     let app_state = web::Data::new(AppState {
         scylla_db: Mutex::new(scylla_db),
     });
-    let server = HttpServer::new(move || {
-        App::new().service(ping).service(scope("/api/v1"))
-    })
+    let server = HttpServer::new(move || { App::new().service(ping).service(scope("/api/v1")) })
         .listen(listener)?
         .run();
 

@@ -1,8 +1,9 @@
-use std::{ error::Error, str::FromStr, sync::atomic::Ordering };
+use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
 use scylla::transport::errors::QueryError;
 
-use super::{ get_epoch_ms, schema::*, scylla_tables::ScyllaOrder, ScyllaDb };
+use crate::db::{get_epoch_ms, schema::{Id, Order, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol}, scylla_tables::ScyllaOrder, ScyllaDb};
+
 
 impl Order {
     pub fn new(
@@ -78,7 +79,7 @@ impl ScyllaDb {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         "#;
         let order = order.to_scylla_order();
-        let res = self.session.query(s, order).await?;
+        self.session.query(s, order).await?;
         Ok(())
     }
     pub async fn get_order(&self, order_id: i64) -> Result<Order, Box<dyn Error>> {
@@ -121,7 +122,7 @@ impl ScyllaDb {
                     order_status = ?
                 WHERE id = ? ;
             "#;
-        let res = self.session.query(s, (
+        self.session.query(s, (
             order.price,
             order.initial_quantity,
             order.filled_quantity,

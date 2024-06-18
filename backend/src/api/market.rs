@@ -3,7 +3,7 @@ use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
 use scylla::transport::errors::QueryError;
 
-use super::{ schema::{ Asset, Exchange, Market, Symbol }, scylla_tables::ScyllaMarket, ScyllaDb };
+use crate::db::{schema::{Asset, Exchange, Market, Symbol}, scylla_tables::ScyllaMarket, ScyllaDb};
 
 impl Market {
     pub fn new(
@@ -76,7 +76,7 @@ impl ScyllaDb {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         "#;
         let market = market.to_scylla_market();
-        let res = self.session.query(s, market).await?;
+        self.session.query(s, market).await?;
         Ok(())
     }
     pub async fn get_market(&self, symbol: Symbol) -> Result<Market, Box<dyn Error>> {
@@ -122,7 +122,7 @@ impl ScyllaDb {
                 quote = ? 
             ;
         "#;
-        let res = self.session.query(s, (
+        self.session.query(s, (
             market.max_price,
             market.min_price,
             market.tick_size,

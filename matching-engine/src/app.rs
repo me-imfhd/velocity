@@ -6,7 +6,6 @@ use serde::{ Deserialize, Serialize };
 
 use crate::{
     config::GlobalConfig,
-    db::schema::UserSchema,
     matching_engine::{ self, engine::MatchingEngine, Id },
     routes::{
         engine::{

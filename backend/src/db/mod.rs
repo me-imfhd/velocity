@@ -1,17 +1,8 @@
-use std::{ error::Error, sync::atomic::AtomicU64, time::{ SystemTime, UNIX_EPOCH } };
-
-use rust_decimal::Decimal;
+use std::{ error::Error, time::{ SystemTime, UNIX_EPOCH } };
 use scylla::{ frame::value::Counter, transport::errors::QueryError, Session, SessionBuilder };
 
 pub mod schema;
-pub mod user;
-pub mod trade;
-pub mod order;
-pub mod ticker;
-pub mod market;
 pub mod scylla_tables;
-#[cfg(test)]
-pub mod tests;
 
 pub struct ScyllaDb {
     pub session: Session,

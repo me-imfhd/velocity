@@ -3,7 +3,8 @@ use std::{ error::Error, str::FromStr };
 use scylla::transport::errors::QueryError;
 use rust_decimal_macros::dec;
 use rust_decimal::Decimal;
-use super::{ schema::{ Symbol, Ticker }, scylla_tables::ScyllaTicker, ScyllaDb };
+
+use crate::db::{schema::{Symbol, Ticker}, scylla_tables::ScyllaTicker, ScyllaDb};
 
 impl Ticker {
     pub fn new(symbol: Symbol) -> Ticker {
@@ -61,7 +62,7 @@ impl ScyllaDb {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         "#;
         let ticker = ticker.to_scylla_ticker();
-        let res = self.session.query(s, ticker).await?;
+        self.session.query(s, ticker).await?;
         Ok(())
     }
     pub async fn get_ticker(&self, symbol: Symbol) -> Result<Ticker, Box<dyn Error>> {
@@ -103,7 +104,7 @@ impl ScyllaDb {
                 last_price = ?
             WHERE symbol = ? ;
         "#;
-        let res = self.session.query(s, (
+        self.session.query(s, (
             ticker.base_volume,
             ticker.quote_volume,
             ticker.price_change,

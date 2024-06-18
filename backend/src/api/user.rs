@@ -1,17 +1,12 @@
-use std::{
-    borrow::BorrowMut,
-    collections::HashMap,
-    error::Error,
-    str::FromStr,
-    sync::atomic::Ordering,
-};
+use std::{ collections::HashMap, error::Error, str::FromStr };
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use scylla::transport::errors::QueryError;
 use strum::IntoEnumIterator;
 
-use super::{ schema::{ Asset, Id, Quantity, User }, scylla_tables::ScyllaUser, ScyllaDb };
+use crate::db::{ schema::{ Asset, Id, Quantity, User }, scylla_tables::ScyllaUser, ScyllaDb };
+
 pub enum UserError {
     OverWithdrawl,
     AssetNotFound,
@@ -57,7 +52,7 @@ impl User {
         }
     }
     pub fn lock_amount(&mut self, asset: &Asset, quantity: Quantity) {
-        let mut locked_balance = self.locked_balance.get_mut(asset);
+        let locked_balance = self.locked_balance.get_mut(asset);
         match locked_balance {
             None => {
                 self.locked_balance.insert(asset.clone(), dec!(0.0));
@@ -73,7 +68,7 @@ impl User {
         locked_balance -= quantity;
     }
     pub fn deposit(&mut self, asset: &Asset, quantity: Quantity) {
-        let mut assets_balance = self.balance.get_mut(asset);
+        let assets_balance = self.balance.get_mut(asset);
         match assets_balance {
             None => {
                 self.balance.insert(asset.clone(), quantity);
@@ -132,7 +127,7 @@ impl ScyllaDb {
             ) VALUES (?, ?, ?);
         "#;
         let user = user.to_scylla_user();
-        let res = self.session.query(s, user).await?;
+        let _ = self.session.query(s, user).await?;
         Ok(())
     }
     pub async fn get_user(&self, user_id: i64) -> Result<User, Box<dyn Error>> {
@@ -164,7 +159,7 @@ impl ScyllaDb {
                 locked_balance = ?
             WHERE id = ?;
         "#;
-        let res = self.session.query(s, (user.balance, user.locked_balance, user.id)).await?;
+        let _ = self.session.query(s, (user.balance, user.locked_balance, user.id)).await?;
         Ok(())
     }
 }
