@@ -48,10 +48,29 @@ async fn update_user() {
     let updated_user = scylla_db.get_user(1).await.unwrap();
 
     let updated_balance = *updated_user.balance.get(&Asset::SOL).unwrap();
-    assert_eq!(
-        updated_balance,
-        amount,
+    assert_eq!(updated_balance, amount);
+}
+#[tokio::test]
+async fn update_market() {
+    let market = Market::new(
+        "SOL_USDT".to_string(),
+        Decimal::NEGATIVE_ONE,
+        dec!(0.01),
+        dec!(0.01),
+        Decimal::NEGATIVE_ONE,
+        dec!(0.0001),
+        dec!(0.0001)
     );
+    let scylla_db = init().await;
+    let amount = dec!(210);
+    scylla_db.new_market(market).await.unwrap();
+    let mut market = scylla_db.get_market("SOL_USDT".to_string()).await.unwrap();
+    market.min_price += amount;
+    scylla_db.update_market(&mut market).await.unwrap();
+    let updated_market = scylla_db.get_market("SOL_USDT".to_string()).await.unwrap();
+
+    let updated_balance = updated_market.min_price;
+    assert_eq!(updated_balance, amount + dec!(0.01));
 }
 
 async fn init() -> ScyllaDb {

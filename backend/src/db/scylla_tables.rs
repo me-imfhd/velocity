@@ -87,7 +87,7 @@ impl ScyllaDb {
         let create_market_table: &str =
             r#"
         CREATE TABLE IF NOT EXISTS keyspace_1.market_table (
-            symbol text PRIMARY KEY,
+            symbol text,
             base text,
             quote text,
             max_price text,
@@ -95,7 +95,8 @@ impl ScyllaDb {
             tick_size text,
             max_quantity text,
             min_quantity text,
-            step_size text
+            step_size text,
+            PRIMARY KEY (symbol, base, quote)
         );
       "#;
         self.session.query(create_market_table, &[]).await?;
@@ -120,7 +121,7 @@ impl ScyllaDb {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaOrder {
     pub id: Id,
     pub user_id: Id,
@@ -139,7 +140,7 @@ pub struct ScyllaUser {
     pub balance: HashMap<Asset, String>,
     pub locked_balance: HashMap<Asset, String>,
 }
-#[derive(Debug, Serialize, Deserialize, SerializeRow)]
+#[derive(Debug, Serialize, Deserialize, SerializeRow, FromRow)]
 pub struct ScyllaTrade {
     pub id: Id,
     pub quantity: String,
@@ -149,7 +150,7 @@ pub struct ScyllaTrade {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaTicker {
     pub symbol: Symbol,
     pub base_volume: String,
@@ -161,7 +162,7 @@ pub struct ScyllaTicker {
     pub last_price: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, SerializeRow)]
+#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaMarket {
     pub symbol: Symbol,
     pub base: Asset,

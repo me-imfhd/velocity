@@ -1,7 +1,9 @@
+use std::{ error::Error, str::FromStr };
+
 use rust_decimal::Decimal;
 use scylla::transport::errors::QueryError;
 
-use super::{ schema::{ Exchange, Market, Symbol }, scylla_tables::ScyllaMarket, ScyllaDb };
+use super::{ schema::{ Asset, Exchange, Market, Symbol }, scylla_tables::ScyllaMarket, ScyllaDb };
 
 impl Market {
     pub fn new(
@@ -41,6 +43,22 @@ impl Market {
     }
 }
 
+impl ScyllaMarket {
+    fn from_scylla_market(&self) -> Market {
+        Market {
+            base: Asset::from_str(&self.base).unwrap(),
+            max_price: Decimal::from_str(&self.max_price).unwrap(),
+            max_quantity: Decimal::from_str(&self.max_quantity).unwrap(),
+            min_price: Decimal::from_str(&self.min_price).unwrap(),
+            min_quantity: Decimal::from_str(&self.min_quantity).unwrap(),
+            quote: Asset::from_str(&self.quote).unwrap(),
+            step_size: Decimal::from_str(&self.step_size).unwrap(),
+            symbol: self.symbol.to_string(),
+            tick_size: Decimal::from_str(&self.tick_size).unwrap(),
+        }
+    }
+}
+
 impl ScyllaDb {
     pub async fn new_market(&self, market: Market) -> Result<(), QueryError> {
         let s =
@@ -59,6 +77,62 @@ impl ScyllaDb {
         "#;
         let market = market.to_scylla_market();
         let res = self.session.query(s, market).await?;
+        Ok(())
+    }
+    pub async fn get_market(&self, symbol: Symbol) -> Result<Market, Box<dyn Error>> {
+        let s =
+            r#"
+            SELECT
+                symbol,
+                base,
+                quote,
+                max_price,
+                min_price,
+                tick_size,
+                max_quantity,
+                min_quantity,
+                step_size
+            FROM keyspace_1.market_table
+            WHERE symbol = ? ;
+        "#;
+        let res = self.session.query(s, (symbol,)).await?;
+        let mut markets = res.rows_typed::<ScyllaMarket>()?;
+        let scylla_market = markets
+            .next()
+            .transpose()?
+            .ok_or(QueryError::InvalidMessage("Market does not exist in db".to_string()))?;
+        let market = scylla_market.from_scylla_market();
+        Ok(market)
+    }
+    pub async fn update_market(&self, market: &mut Market) -> Result<(), Box<dyn Error>> {
+        let market = market.to_scylla_market();
+        let s =
+            r#"
+            UPDATE keyspace_1.market_table 
+            SET
+                max_price = ?,
+                min_price = ?,
+                tick_size = ?,
+                max_quantity = ?,
+                min_quantity = ?,
+                step_size = ?
+            WHERE 
+                symbol = ? AND
+                base = ? AND
+                quote = ? 
+            ;
+        "#;
+        let res = self.session.query(s, (
+            market.max_price,
+            market.min_price,
+            market.tick_size,
+            market.max_quantity,
+            market.min_quantity,
+            market.step_size,
+            market.symbol,
+            market.base,
+            market.quote,
+        )).await?;
         Ok(())
     }
 }
