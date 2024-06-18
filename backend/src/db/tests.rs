@@ -1,18 +1,14 @@
-use std::f32::INFINITY;
+use std::{ f32::INFINITY, ops::Deref };
 use rust_decimal_macros::dec;
-use schema::{ Market, Order, OrderSide, OrderType, Ticker, Trade, User };
+use schema::{ Asset, Market, Order, OrderSide, OrderType, Ticker, Trade, User };
 use super::*;
 #[tokio::test]
 async fn is_able_to_create_tables() {
-    let uri = "127.0.0.1:9042";
-    let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
-    scylla_db.initialize().await.unwrap();
+    init().await;
 }
 #[tokio::test]
 async fn insert_tables_all() {
-    let uri = "127.0.0.1:9042";
-    let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
-    scylla_db.initialize().await.unwrap();
+    let scylla_db = init().await;
     scylla_db
         .new_market(
             Market::new(
@@ -37,9 +33,30 @@ async fn insert_tables_all() {
 }
 #[tokio::test]
 async fn get_user() {
+    let scylla_db = init().await;
+    scylla_db.new_user(User::new()).await.unwrap();
+    scylla_db.get_user(1).await.unwrap();
+}
+#[tokio::test]
+async fn update_user() {
+    let scylla_db = init().await;
+    let amount = dec!(20.0);
+    scylla_db.new_user(User::new()).await.unwrap();
+    let mut user = scylla_db.get_user(1).await.unwrap();
+    user.deposit(&Asset::SOL, amount);
+    scylla_db.update_user(&mut user).await.unwrap();
+    let updated_user = scylla_db.get_user(1).await.unwrap();
+
+    let updated_balance = *updated_user.balance.get(&Asset::SOL).unwrap();
+    assert_eq!(
+        updated_balance,
+        amount,
+    );
+}
+
+async fn init() -> ScyllaDb {
     let uri = "127.0.0.1:9042";
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
     scylla_db.initialize().await.unwrap();
-    scylla_db.new_user(User::new()).await.unwrap();
-    scylla_db.get_user(1).await.unwrap();
+    scylla_db
 }

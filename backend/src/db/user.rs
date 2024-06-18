@@ -156,4 +156,17 @@ impl ScyllaDb {
         let user = scylla_user.from_scylla_user();
         Ok(user)
     }
+    pub async fn update_user(&self, user: &mut User) -> Result<(), Box<dyn Error>> {
+        let user = user.to_scylla_user();
+        let s =
+            r#"
+            UPDATE keyspace_1.user_table 
+            SET
+                balance = ?,
+                locked_balance = ?
+            WHERE id = ?;
+        "#;
+        let res = self.session.query(s, (user.balance, user.locked_balance, user.id)).await?;
+        Ok(())
+    }
 }
