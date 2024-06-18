@@ -11,7 +11,7 @@ use rust_decimal_macros::dec;
 use scylla::transport::errors::QueryError;
 use strum::IntoEnumIterator;
 
-use super::{ schema::{ Asset, Quantity, User }, scylla_tables::ScyllaUser, ScyllaDb, USER_ID };
+use super::{ schema::{ Asset, Id, Quantity, User }, scylla_tables::ScyllaUser, ScyllaDb };
 pub enum UserError {
     OverWithdrawl,
     AssetNotFound,
@@ -41,9 +41,7 @@ impl ScyllaUser {
     }
 }
 impl User {
-    pub fn new() -> User {
-        USER_ID.fetch_add(1, Ordering::SeqCst);
-        let id = USER_ID.load(Ordering::SeqCst);
+    pub fn new(id: Id) -> User {
         let mut balance: HashMap<Asset, Quantity> = HashMap::new();
         let mut locked_balance: HashMap<Asset, Quantity> = HashMap::new();
         for asset in Asset::iter() {
@@ -53,7 +51,7 @@ impl User {
             locked_balance.insert(asset, dec!(0.0));
         }
         User {
-            id: id as i64,
+            id,
             balance,
             locked_balance,
         }

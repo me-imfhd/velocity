@@ -12,7 +12,7 @@ use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use super::{ get_epoch_ms, ORDER_ID, TRADE_ID, USER_ID };
+use super::get_epoch_ms;
 
 pub type Id = i64;
 pub type Symbol = String;

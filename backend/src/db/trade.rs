@@ -8,17 +8,14 @@ use super::{
     schema::{ Price, Quantity, Trade },
     scylla_tables::ScyllaTrade,
     ScyllaDb,
-    TRADE_ID,
 };
 
 impl Trade {
-    pub fn new(is_market_maker: bool, price: Price, quantity: Quantity) -> Trade {
-        TRADE_ID.fetch_add(1, Ordering::SeqCst);
-        let id = TRADE_ID.load(Ordering::SeqCst);
+    pub fn new(id: i64, is_market_maker: bool, price: Price, quantity: Quantity) -> Trade {
         let timestamp = get_epoch_ms();
         let quote_quantity = price * quantity;
         Trade {
-            id: id as i64,
+            id,
             quantity: quantity,
             quote_quantity: quote_quantity,
             is_market_maker,

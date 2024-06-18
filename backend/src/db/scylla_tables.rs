@@ -23,6 +23,7 @@ impl ScyllaDb {
         self.create_trade_table().await?;
         self.create_market_table().await?;
         self.create_ticker_table().await?;
+        self.create_counter_table().await?;
 
         Ok(())
     }
@@ -36,6 +37,19 @@ impl ScyllaDb {
         }"#;
 
         self.session.query(create_keyspace, &[]).await?;
+        Ok(())
+    }
+    async fn create_counter_table(&self) -> Result<()> {
+        let create_counter_table: &str =
+            r#"
+        CREATE TABLE IF NOT EXISTS keyspace_1.counter_table (
+            id bigint PRIMARY KEY,
+            user_id counter,
+            trade_id counter,
+            order_id counter
+        );
+      "#;
+        self.session.query(create_counter_table, &[]).await?;
         Ok(())
     }
     async fn create_user_table(&self) -> Result<()> {

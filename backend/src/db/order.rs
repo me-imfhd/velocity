@@ -2,10 +2,11 @@ use std::{ error::Error, str::FromStr, sync::atomic::Ordering };
 use rust_decimal::Decimal;
 use scylla::transport::errors::QueryError;
 
-use super::{ get_epoch_ms, schema::*, scylla_tables::ScyllaOrder, ScyllaDb, ORDER_ID };
+use super::{ get_epoch_ms, schema::*, scylla_tables::ScyllaOrder, ScyllaDb };
 
 impl Order {
     pub fn new(
+        id: Id,
         user_id: Id,
         initial_quantity: Quantity,
         price: Price,
@@ -13,11 +14,9 @@ impl Order {
         order_type: OrderType,
         symbol: Symbol
     ) -> Order {
-        ORDER_ID.fetch_add(1, Ordering::SeqCst);
-        let id = ORDER_ID.load(Ordering::SeqCst);
         let timestamp = get_epoch_ms();
         Order {
-            id: id as i64,
+            id,
             user_id,
             filled_quantity: rust_decimal_macros::dec!(0.0),
             initial_quantity,
