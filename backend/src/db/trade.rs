@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::{ error::Error, sync::atomic::Ordering };
 
 use rust_decimal::prelude::*;
 use scylla::transport::errors::QueryError;
@@ -37,7 +37,18 @@ impl Trade {
         }
     }
 }
-
+impl ScyllaTrade {
+    fn from_scylla_trade(&self) -> Trade {
+        Trade {
+            id: self.id,
+            is_market_maker: self.is_market_maker,
+            price: Decimal::from_str(&self.price).unwrap(),
+            quantity: Decimal::from_str(&self.quantity).unwrap(),
+            quote_quantity: Decimal::from_str(&self.quote_quantity).unwrap(),
+            timestamp: self.timestamp,
+        }
+    }
+}
 impl ScyllaDb {
     pub async fn new_trade(&self, trade: Trade) -> Result<(), QueryError> {
         let s =
@@ -54,5 +65,27 @@ impl ScyllaDb {
         let trade = trade.to_scylla_trade();
         let res = self.session.query(s, trade).await?;
         Ok(())
+    }
+    pub async fn get_trade(&self, trade_id: i64) -> Result<Trade, Box<dyn Error>> {
+        let s =
+            r#"
+            SELECT
+                id,
+                quantity,
+                quote_quantity,
+                is_market_maker,
+                price,
+                timestamp
+            FROM keyspace_1.trade_table
+            WHERE id = ? ;
+        "#;
+        let res = self.session.query(s, (trade_id,)).await?;
+        let mut trades = res.rows_typed::<ScyllaTrade>()?;
+        let scylla_trade = trades
+            .next()
+            .transpose()?
+            .ok_or(QueryError::InvalidMessage("Trade does not exist in db".to_string()))?;
+        let trade = scylla_trade.from_scylla_trade();
+        Ok(trade)
     }
 }
