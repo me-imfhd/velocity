@@ -1,8 +1,13 @@
 use std::{ net::TcpListener, sync::Mutex };
 
 use actix_web::{ web::{ self, scope }, App, HttpServer };
+use redis::Connection;
 
-use crate::{ config::GlobalConfig, db::ScyllaDb, routes::ping::ping };
+use crate::{
+    config::GlobalConfig,
+    db::ScyllaDb,
+    routes::{ order::order, ping::ping, user::new_user },
+};
 
 pub struct Application {
     port: u16,
@@ -29,17 +34,35 @@ impl Application {
 
 pub struct AppState {
     pub scylla_db: Mutex<ScyllaDb>,
+    pub redis_connection: Mutex<Connection>,
 }
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
     let uri = "127.0.0.1:9042";
+    let redis_uri = "redis://127.0.0.1:6379";
+    let mut redis_connection = connect_redis(&redis_uri);
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
     scylla_db.initialize().await.unwrap();
     let app_state = web::Data::new(AppState {
         scylla_db: Mutex::new(scylla_db),
+        redis_connection: Mutex::new(redis_connection),
     });
-    let server = HttpServer::new(move || { App::new().service(ping).service(scope("/api/v1")) })
+    let server = HttpServer::new(move || {
+        App::new().service(
+            scope("/api/v1")
+                .app_data(app_state.clone())
+                .service(ping)
+                .service(order)
+                .service(new_user)
+        )
+    })
         .listen(listener)?
         .run();
 
     Ok(server)
+}
+
+fn connect_redis(url: &str) -> Connection {
+    let client = redis::Client::open(url).expect("Could not create client.");
+    let mut connection = client.get_connection().expect("Could not connect to the client");
+    return connection;
 }

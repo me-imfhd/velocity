@@ -56,7 +56,7 @@ impl OrderStatus {
         Err(())
     }
 }
-#[derive(Debug, Deserialize, Serialize, EnumStringify, EnumIter)]
+#[derive(Debug, Clone, Deserialize, Serialize, EnumStringify, EnumIter)]
 pub enum OrderSide {
     Bid,
     Ask,

@@ -2,8 +2,12 @@ use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
 use scylla::transport::errors::QueryError;
 
-use crate::db::{get_epoch_ms, schema::{Id, Order, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol}, scylla_tables::ScyllaOrder, ScyllaDb};
-
+use crate::db::{
+    get_epoch_ms,
+    schema::{ Id, Order, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol },
+    scylla_tables::ScyllaOrder,
+    ScyllaDb,
+};
 
 impl Order {
     pub fn new(
@@ -122,6 +126,7 @@ impl ScyllaDb {
                     order_status = ?
                 WHERE id = ? ;
             "#;
+
         self.session.query(s, (
             order.price,
             order.initial_quantity,
