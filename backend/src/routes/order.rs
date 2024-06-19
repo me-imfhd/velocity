@@ -5,7 +5,7 @@ use serde_json::to_string;
 
 use crate::{
     app::AppState,
-    db::schema::{ Id, Order, OrderSide, OrderType, Price, Quantity, Symbol },
+    db::schema::{ Asset, Exchange, Id, Order, OrderSide, OrderType, Price, Quantity, Symbol },
 };
 
 #[derive(Deserialize)]
@@ -15,15 +15,38 @@ pub struct OrderParams {
     order_type: OrderType,
     quantity: Quantity,
     user_id: Id,
-    symbol: Symbol,
+    base: Asset,
+    quote: Asset,
 }
+
 #[actix_web::post("/order")]
-pub async fn order(
-    body: Json<OrderParams>,
-    app_state: Data<AppState>
-) -> actix_web::HttpResponse {
+pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
     let con = &mut app_state.redis_connection.lock().unwrap();
+    let exchange = Exchange::new(body.base, body.quote);
+    let user = s_db.get_user(body.user_id).await;
+    match user {
+        Ok(user) => {
+            match &body.order_side {
+                OrderSide::Bid => {
+                    let ava_b = user.available_balance(&exchange.quote).unwrap();
+                    if ava_b * body.quantity < body.price * body.quantity {
+                        return HttpResponse::NotAcceptable().json("Insufficient balance.");
+                    }
+                }
+                OrderSide::Ask => {
+                    let ava_b = user.available_balance(&exchange.base).unwrap();
+                    if ava_b < body.quantity {
+                        return HttpResponse::NotAcceptable().json("Insufficient balance.");
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            HttpResponse::NotFound().json(err.to_string());
+        }
+    }
+
     let result = s_db.new_order_id().await;
     match result {
         Ok(id) => {
@@ -34,7 +57,7 @@ pub async fn order(
                 body.price,
                 body.order_side.clone(),
                 body.order_type.clone(),
-                body.symbol.to_string()
+                exchange.symbol.clone()
             );
             let order_serialized = to_string(&order).unwrap();
             let result = s_db.new_order(order).await;
@@ -42,7 +65,7 @@ pub async fn order(
                 Ok(_) => {
                     let res = redis
                         ::cmd("LPUSH")
-                        .arg(format!("queues:{}:{}", body.order_side.to_string(), body.symbol))
+                        .arg(format!("queues:{}:{}", body.order_side.to_string(), exchange.symbol))
                         .arg(order_serialized)
                         .query::<Value>(con);
                     match res {

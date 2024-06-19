@@ -15,7 +15,7 @@ impl Market {
         min_quantity: Decimal,
         step_size: Decimal
     ) -> Market {
-        let exchange = Exchange::from_symbol(symbol.clone());
+        let exchange = Exchange::from_symbol(symbol.clone()).unwrap();
         Market {
             symbol,
             base: exchange.base,

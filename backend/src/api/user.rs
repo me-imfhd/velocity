@@ -7,6 +7,7 @@ use strum::IntoEnumIterator;
 
 use crate::db::{ schema::{ Asset, Id, Quantity, User }, scylla_tables::ScyllaUser, ScyllaDb };
 
+#[derive(Debug)]
 pub enum UserError {
     OverWithdrawl,
     AssetNotFound,

@@ -28,13 +28,14 @@ impl Exchange {
             symbol,
         }
     }
-    pub fn from_symbol(symbol: Symbol) -> Exchange {
+    // todo: handle this
+    pub fn from_symbol(symbol: Symbol) -> Result<Exchange, ()> {
         let symbols: Vec<&str> = symbol.split("_").collect();
         let base_str = symbols.get(0).unwrap();
         let quote_str = symbols.get(1).unwrap();
         let base = Asset::from_str(&base_str).expect("Incorrect symbol");
         let quote = Asset::from_str(&quote_str).expect("Incorrect symbol");
-        Exchange::new(base, quote)
+        Ok(Exchange::new(base, quote))
     }
 }
 
