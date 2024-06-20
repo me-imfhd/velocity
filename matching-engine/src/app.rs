@@ -1,12 +1,13 @@
 use std::{ any, collections::HashMap, net::TcpListener, sync::Mutex };
+use rayon::prelude::*;
 
-use actix_web::{ web::{ self, scope }, App, HttpServer };
+use actix_web::{ web::{ self, scope, Data }, App, HttpServer };
 use redis::{ Commands, Connection };
 use serde::{ Deserialize, Serialize };
 
 use crate::{
     config::GlobalConfig,
-    matching_engine::{ self, engine::MatchingEngine, Id },
+    matching_engine::{ self, engine::MatchingEngine, orderbook::OrderSide, Id },
     routes::{
         engine::{
             add_new_market,
@@ -57,6 +58,17 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
         matching_engine: Mutex::new(matching_engine),
         redis_connection: Mutex::new(redis_connection),
     });
+    let worker_app_state = app_state.clone();
+    let matching_engine = worker_app_state.matching_engine.lock().unwrap();
+    let symbols = matching_engine.registered_exchanges();
+    symbols.par_iter().for_each(|symbol| {
+        let sym4asks = symbol.clone();
+        let asks_worker_app_state = worker_app_state.clone();
+        let sym4bids = symbol.clone();
+        let bids_worker_app_state = worker_app_state.clone();
+        rayon::spawn(process_order(sym4bids, bids_worker_app_state, OrderSide::Bid));
+        rayon::spawn(process_order(sym4asks, asks_worker_app_state, OrderSide::Ask));
+    });
     let server = HttpServer::new(move || {
         App::new()
             .service(health_check)
@@ -81,4 +93,29 @@ fn connect_redis(url: &str) -> Connection {
     let client = redis::Client::open(url).expect("Could not create client.");
     let mut connection = client.get_connection().expect("Could not connect to the client");
     return connection;
+}
+
+fn process_order(symbol: String, app_state: Data<AppState>, order_side: OrderSide) -> impl Fn() {
+    move || {
+        println!("{}s Worker Thread Created For {}", order_side.to_string(), symbol);
+        loop {
+            let con = &mut app_state.redis_connection.lock().unwrap();
+            let result = redis
+                ::cmd("RPOP")
+                .arg(format!("queues:{}:{}", order_side.to_string(), symbol))
+                .query::<String>(con);
+            match result {
+                Ok(order_string) => {
+                    println!(
+                        "{} Order Recieved, poped it, symbol: {}",
+                        order_side.to_string(),
+                        symbol
+                    );
+                }
+                Err(_) => {
+                    println!("{}s Task queue empty, symbol: {}", order_side.to_string(), symbol);
+                }
+            }
+        }
+    }
 }

@@ -35,3 +35,4 @@ chrono = "0.4.38"
 serde_json = { version = "1.0.117", features = ["raw_value"] }
 redis = "0.25.4"
 enum_stringify = "0.4.2"
+rayon = "1.10.0"
