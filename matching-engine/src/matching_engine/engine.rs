@@ -64,6 +64,10 @@ impl MatchingEngine {
         });
         println!("\nOrderbook recovering complete.")
     }
+    pub fn registered_exchanges(&self)-> Vec<Symbol>{
+        let exchanges: Vec<Symbol> = self.orderbooks.keys().map(|e| e.symbol.clone()).collect();
+        exchanges
+    }
     pub fn get_quote(
         &mut self,
         order_side: &OrderSide,
