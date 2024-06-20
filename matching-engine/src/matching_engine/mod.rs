@@ -30,7 +30,3 @@ impl Asset {
 pub type Symbol = String;
 pub type Id = u64;
 pub type Quantity = Decimal;
-
-pub static ORDER_ID: AtomicU64 = AtomicU64::new(0);
-pub static TRADE_ID: AtomicU64 = AtomicU64::new(0);
-pub static USER_ID: AtomicU64 = AtomicU64::new(0);

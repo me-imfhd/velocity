@@ -1,12 +1,12 @@
-use redis::{ Commands, FromRedisValue, Value };
+use redis::{ Commands, Connection, FromRedisValue, Value };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
+use serde_json::from_str;
 use strum_macros::FromRepr;
-
 use crate::matching_engine::Symbol;
 
-use super::orderbook::{ Limit, Order, OrderSide, Orderbook, Price, Trade };
+use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
 use super::{ Asset, Id, Quantity };
 use std::borrow::BorrowMut;
@@ -28,7 +28,7 @@ impl Exchange {
         Exchange {
             base,
             quote,
-            symbol
+            symbol,
         }
     }
     pub fn from_symbol(symbol: Symbol) -> Exchange {
@@ -64,9 +64,40 @@ impl MatchingEngine {
         });
         println!("\nOrderbook recovering complete.")
     }
-    pub fn registered_exchanges(&self)-> Vec<Symbol>{
-        let exchanges: Vec<Symbol> = self.orderbooks.keys().map(|e| e.symbol.clone()).collect();
+    pub fn registered_exchanges(&self) -> Vec<Symbol> {
+        let exchanges: Vec<Symbol> = self.orderbooks
+            .keys()
+            .map(|e| e.symbol.clone())
+            .collect();
         exchanges
+    }
+    pub fn process_order(&mut self, order_string: &str, rc: &mut Connection) {
+        let recieved_order: RecievedOrder = from_str(order_string).unwrap();
+        let exchange = Exchange::from_symbol(recieved_order.symbol);
+        match recieved_order.order_type {
+            OrderType::Market => {
+                let order = Order::new(
+                    recieved_order.id,
+                    recieved_order.timestamp,
+                    recieved_order.order_side,
+                    recieved_order.initial_quantity,
+                    false,
+                    recieved_order.user_id
+                );
+                self.fill_market_order(order, &exchange, rc);
+            }
+            OrderType::Limit => {
+                let order = Order::new(
+                    recieved_order.id,
+                    recieved_order.timestamp,
+                    recieved_order.order_side,
+                    recieved_order.initial_quantity,
+                    true,
+                    recieved_order.user_id
+                );
+                self.fill_limit_order(recieved_order.price, order, &exchange, rc);
+            }
+        }
     }
     pub fn get_quote(
         &mut self,
@@ -101,19 +132,21 @@ impl MatchingEngine {
     pub fn fill_market_order(
         &mut self,
         mut order: Order,
-        exchange: &Exchange
+        exchange: &Exchange,
+        rc: &mut Connection
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        Ok(orderbook.fill_market_order(order, exchange))
+        Ok(orderbook.fill_market_order(order, exchange, rc))
     }
     pub fn fill_limit_order(
         &mut self,
         price: Price,
         mut order: Order,
-        exchange: &Exchange
+        exchange: &Exchange,
+        rc: &mut Connection
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        orderbook.fill_limit_order(price, order, exchange);
+        orderbook.fill_limit_order(price, order, exchange, rc);
         Ok(())
     }
     // pub fn add_limit_order(
@@ -140,15 +173,37 @@ impl MatchingEngine {
         Ok(Orderbook::bid_limits(&mut orderbook.bids))
     }
 }
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RecievedOrder {
+    pub id: Id,
+    pub user_id: Id,
+    pub symbol: Symbol,
+    pub price: Price,
+    pub initial_quantity: Quantity,
+    pub filled_quantity: Quantity,
+    pub order_type: OrderType,
+    pub order_side: OrderSide,
+    pub order_status: OrderStatus,
+    pub timestamp: u64,
+}
 
-fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>) {
+#[derive(Debug, Deserialize, Serialize)]
+pub enum OrderStatus {
+    InProgress,
+    Filled,
+    PartiallyFilled,
+    Failed,
+}
+
+fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>, Connection) {
     let mut engine = MatchingEngine::init();
     let exchange = Exchange::new(Asset::SOL, Asset::USDT);
     let mut orderbook = Orderbook::new(exchange.clone());
     engine.add_new_market(exchange.clone());
-
-    let ids: Vec<_> = [1,2,3,4,5,6,7,8].to_vec();
-    (engine, exchange, orderbook, ids)
+    let client = redis::Client::open("redis://127.0.0.1:6379").expect("Could not create client.");
+    let mut connection = client.get_connection().expect("Could not connect to the client");
+    let ids: Vec<_> = [1, 2, 3, 4, 5, 6, 7, 8].to_vec();
+    (engine, exchange, orderbook, ids, connection)
 }
 
 #[cfg(test)]
@@ -162,15 +217,15 @@ pub mod tests {
     #[test]
     fn is_sorting_working() {
         let mut orderbook = Orderbook::new(Exchange::new(Asset::SOL, Asset::USDT));
-        orderbook.add_limit_order(dec!(110), Order::new(OrderSide::Ask, dec!(20), true, 1));
-        orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Ask, dec!(20), true, 2));
-        orderbook.add_limit_order(dec!(99), Order::new(OrderSide::Ask, dec!(20), true, 3));
-        orderbook.add_limit_order(dec!(200), Order::new(OrderSide::Ask, dec!(20), true, 4));
+        orderbook.add_limit_order(dec!(110), Order::new(1, 1, OrderSide::Ask, dec!(20), true, 1));
+        orderbook.add_limit_order(dec!(100), Order::new(2, 2, OrderSide::Ask, dec!(20), true, 2));
+        orderbook.add_limit_order(dec!(99), Order::new(3, 3, OrderSide::Ask, dec!(20), true, 3));
+        orderbook.add_limit_order(dec!(200), Order::new(4, 4, OrderSide::Ask, dec!(20), true, 4));
 
-        orderbook.add_limit_order(dec!(99), Order::new(OrderSide::Bid, dec!(20), true, 5));
-        orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Bid, dec!(20), true, 6));
-        orderbook.add_limit_order(dec!(88), Order::new(OrderSide::Bid, dec!(20), true, 7));
-        orderbook.add_limit_order(dec!(101), Order::new(OrderSide::Bid, dec!(20), true, 8));
+        orderbook.add_limit_order(dec!(99), Order::new(5, 5, OrderSide::Bid, dec!(20), true, 5));
+        orderbook.add_limit_order(dec!(100), Order::new(6, 6, OrderSide::Bid, dec!(20), true, 6));
+        orderbook.add_limit_order(dec!(88), Order::new(7, 7, OrderSide::Bid, dec!(20), true, 7));
+        orderbook.add_limit_order(dec!(101), Order::new(8, 8, OrderSide::Bid, dec!(20), true, 8));
 
         let best_ask_price = Orderbook::ask_limits(&mut orderbook.asks).first().unwrap().price; // first element
         assert_eq!(orderbook.asks.get(&dec!(99)).unwrap().price, best_ask_price);
@@ -184,29 +239,53 @@ pub mod tests {
     }
     #[test]
     fn adds_to_orderbook_if_didnot_match() {
-        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids, mut rc) = setup_engine_and_users();
         // dummy limit orders in orderbook
-        orderbook.add_limit_order(dec!(110), Order::new(OrderSide::Ask, dec!(20), true, ids[0]));
-        orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Ask, dec!(20), true, ids[2]));
-        orderbook.add_limit_order(dec!(99), Order::new(OrderSide::Ask, dec!(20), true, ids[3]));
-        orderbook.add_limit_order(dec!(200), Order::new(OrderSide::Ask, dec!(20), true, ids[1]));
-        orderbook.add_limit_order(dec!(99), Order::new(OrderSide::Bid, dec!(20), true, ids[2]));
-        orderbook.add_limit_order(dec!(100), Order::new(OrderSide::Bid, dec!(20), true, ids[3]));
-        orderbook.add_limit_order(dec!(88), Order::new(OrderSide::Bid, dec!(20), true, ids[1]));
-        orderbook.add_limit_order(dec!(101), Order::new(OrderSide::Bid, dec!(20), true, ids[2]));
+        orderbook.add_limit_order(
+            dec!(110),
+            Order::new(1, 1, OrderSide::Ask, dec!(20), true, ids[0])
+        );
+        orderbook.add_limit_order(
+            dec!(100),
+            Order::new(2, 2, OrderSide::Ask, dec!(20), true, ids[2])
+        );
+        orderbook.add_limit_order(
+            dec!(99),
+            Order::new(3, 3, OrderSide::Ask, dec!(20), true, ids[3])
+        );
+        orderbook.add_limit_order(
+            dec!(200),
+            Order::new(4, 4, OrderSide::Ask, dec!(20), true, ids[1])
+        );
+        orderbook.add_limit_order(
+            dec!(99),
+            Order::new(5, 5, OrderSide::Bid, dec!(20), true, ids[2])
+        );
+        orderbook.add_limit_order(
+            dec!(100),
+            Order::new(6, 6, OrderSide::Bid, dec!(20), true, ids[3])
+        );
+        orderbook.add_limit_order(
+            dec!(88),
+            Order::new(7, 7, OrderSide::Bid, dec!(20), true, ids[1])
+        );
+        orderbook.add_limit_order(
+            dec!(101),
+            Order::new(8, 8, OrderSide::Bid, dec!(20), true, ids[2])
+        );
 
-        let bob_order = Order::new(OrderSide::Bid, dec!(10), true, ids[4]);
-        orderbook.fill_limit_order(dec!(50), bob_order, &exchange);
+        let bob_order = Order::new(9, 9, OrderSide::Bid, dec!(10), true, ids[4]);
+        orderbook.fill_limit_order(dec!(50), bob_order, &exchange, &mut rc);
         assert_eq!(orderbook.bids.contains_key(&dec!(50)), true); // failed to match at best ask(88) so it should be added to orderbook
 
-        let alice_order = Order::new(OrderSide::Ask, dec!(10), true, ids[5]);
-        orderbook.fill_limit_order(dec!(201), alice_order, &exchange);
+        let alice_order = Order::new(10, 10, OrderSide::Ask, dec!(10), true, ids[5]);
+        orderbook.fill_limit_order(dec!(201), alice_order, &exchange, &mut rc);
         assert_eq!(orderbook.asks.contains_key(&dec!(201)), true); // failed to match at best bid(101) so it should be added to orderbook
     }
 
     #[test]
     fn if_matched_but_not_filled_bid_order() {
-        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids, mut rc) = setup_engine_and_users();
 
         let ask_price_limit_1 = dec!(200);
         let ask_price_limit_2 = dec!(400);
@@ -214,24 +293,24 @@ pub mod tests {
         // dummy limit orders in orderbook
         orderbook.add_limit_order(
             ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(20), true, ids[1])
+            Order::new(1, 1, OrderSide::Ask, dec!(20), true, ids[1])
         );
         orderbook.add_limit_order(
             ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[2])
+            Order::new(2, 2, OrderSide::Ask, dec!(5), true, ids[2])
         );
         orderbook.add_limit_order(
             ask_price_limit_2,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[3])
+            Order::new(3, 3, OrderSide::Ask, dec!(5), true, ids[3])
         );
         orderbook.add_limit_order(
             ask_price_limit_3,
-            Order::new(OrderSide::Ask, dec!(10), true, ids[4])
+            Order::new(4, 4, OrderSide::Ask, dec!(10), true, ids[4])
         );
 
-        let bid_order = Order::new(OrderSide::Bid, dec!(40), true, ids[5]);
+        let bid_order = Order::new(5, 5, OrderSide::Bid, dec!(40), true, ids[5]);
         let bid_price_limit_1 = dec!(500);
-        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &exchange);
+        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &exchange, &mut rc);
         // For the Remaining Quantity a new order should be added for the price limit made by the order
         assert_eq!(
             orderbook.bids.get(&bid_price_limit_1).unwrap().orders.get(0).unwrap().quantity,
@@ -240,7 +319,7 @@ pub mod tests {
     }
     #[test]
     fn if_matched_but_not_filled_ask_order() {
-        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids, mut rc) = setup_engine_and_users();
 
         let bid_price_limit_1 = dec!(500);
         let bid_price_limit_2 = dec!(400);
@@ -248,24 +327,24 @@ pub mod tests {
         // dummy limit orders in orderbook
         orderbook.add_limit_order(
             bid_price_limit_1,
-            Order::new(OrderSide::Bid, dec!(20), true, ids[1])
+            Order::new(1, 1, OrderSide::Bid, dec!(20), true, ids[1])
         );
         orderbook.add_limit_order(
             bid_price_limit_1,
-            Order::new(OrderSide::Bid, dec!(5), true, ids[2])
+            Order::new(2, 2, OrderSide::Bid, dec!(5), true, ids[2])
         );
         orderbook.add_limit_order(
             bid_price_limit_2,
-            Order::new(OrderSide::Bid, dec!(5), true, ids[3])
+            Order::new(3, 3, OrderSide::Bid, dec!(5), true, ids[3])
         );
         orderbook.add_limit_order(
             bid_price_limit_3,
-            Order::new(OrderSide::Bid, dec!(10), true, ids[4])
+            Order::new(4, 4, OrderSide::Bid, dec!(10), true, ids[4])
         );
 
-        let ask_order = Order::new(OrderSide::Ask, dec!(40), true, ids[5]);
+        let ask_order = Order::new(5, 5, OrderSide::Ask, dec!(40), true, ids[5]);
         let ask_price_limit_1 = dec!(300);
-        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange);
+        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange, &mut rc);
         // Checkk all orders for that partically price limit is filled
         // println!("{:?}", orderbook.bids.get(&bid_price_limit_1).unwrap().orders);
         assert_eq!(
@@ -284,7 +363,7 @@ pub mod tests {
     }
     #[test]
     fn fill_market_order() {
-        let (mut engine, exchange, mut orderbook, ids) = setup_engine_and_users();
+        let (mut engine, exchange, mut orderbook, ids, mut rc) = setup_engine_and_users();
 
         let ask_price_limit_1 = dec!(200);
         let ask_price_limit_2 = dec!(400);
@@ -292,23 +371,23 @@ pub mod tests {
         // dummy limit orders in orderbook
         orderbook.add_limit_order(
             ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(20), true, ids[1])
+            Order::new(1, 1, OrderSide::Ask, dec!(20), true, ids[1])
         );
         orderbook.add_limit_order(
             ask_price_limit_1,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[2])
+            Order::new(2, 2, OrderSide::Ask, dec!(5), true, ids[2])
         );
         orderbook.add_limit_order(
             ask_price_limit_2,
-            Order::new(OrderSide::Ask, dec!(5), true, ids[3])
+            Order::new(3, 3, OrderSide::Ask, dec!(5), true, ids[3])
         );
         orderbook.add_limit_order(
             ask_price_limit_3,
-            Order::new(OrderSide::Ask, dec!(15), true, ids[4])
+            Order::new(4, 4, OrderSide::Ask, dec!(15), true, ids[4])
         );
 
-        let market_order = Order::new(OrderSide::Bid, dec!(40), false, ids[5]);
-        orderbook.fill_market_order(market_order, &exchange);
+        let market_order = Order::new(5, 5, OrderSide::Bid, dec!(40), false, ids[5]);
+        orderbook.fill_market_order(market_order, &exchange, &mut rc);
         dbg!(&orderbook.asks);
         assert_eq!(
             orderbook.asks.get(&ask_price_limit_3).unwrap().orders.get(0).unwrap().quantity,
