@@ -5,19 +5,13 @@ use std::{
     time::{ self, SystemTime, UNIX_EPOCH },
 };
 use enum_stringify::EnumStringify;
+use redis::{ Connection, PubSub, Value };
 use rust_decimal_macros::dec;
 use rust_decimal::prelude::*;
 use serde::{ Deserialize, Serialize };
+use serde_json::to_string;
 use std::{ clone, collections::HashMap };
-use super::{
-    engine::Exchange,
-    error::MatchingEngineErrors,
-    Asset,
-    Id,
-    Quantity,
-    ORDER_ID,
-    TRADE_ID,
-};
+use super::{ engine::Exchange, error::MatchingEngineErrors, Asset, Id, Quantity };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
@@ -45,7 +39,7 @@ impl Orderbook {
     pub fn get_quote(
         &mut self,
         order_side: &OrderSide,
-        mut order_quantity: Quantity,
+        mut order_quantity: Quantity
     ) -> Result<Decimal, MatchingEngineErrors> {
         let sorted_orders = match order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
@@ -63,7 +57,12 @@ impl Orderbook {
         }
         Err(MatchingEngineErrors::AskedMoreThanTradeable)
     }
-    pub fn fill_market_order(&mut self, mut order: Order, exchange: &Exchange) {
+    pub fn fill_market_order(
+        &mut self,
+        mut order: Order,
+        exchange: &Exchange,
+        rc: &mut Connection
+    ) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
             OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
@@ -71,7 +70,7 @@ impl Orderbook {
         println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
-            order = limit_order.fill_order(order, exchange, price);
+            order = limit_order.fill_order(order, exchange, price, rc);
             if order.is_filled() {
                 break;
             }
@@ -81,7 +80,8 @@ impl Orderbook {
         &mut self,
         price: Price,
         mut order: Order,
-        exchange: &Exchange
+        exchange: &Exchange,
+        rc: &mut Connection
     ) {
         let initial_quantity = order.quantity;
         match order.order_side {
@@ -98,11 +98,7 @@ impl Orderbook {
                         self.add_limit_order(price, order);
                         break;
                     }
-                    order = sorted_bids[i].fill_order(
-                        order,
-                        exchange,
-                        price
-                    );
+                    order = sorted_bids[i].fill_order(order, exchange, price, rc);
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
                         break;
@@ -124,11 +120,7 @@ impl Orderbook {
                         break;
                     }
                     let price = sorted_asks[i].price.clone();
-                    order = sorted_asks[i].fill_order(
-                        order,
-                        exchange,
-                        price
-                    );
+                    order = sorted_asks[i].fill_order(order, exchange, price, rc);
 
                     if order.quantity > dec!(0) && sorted_asks.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
@@ -255,22 +247,21 @@ pub struct Order {
     pub quantity: Quantity,
     pub order_side: OrderSide,
     pub is_market_maker: bool,
-    pub timestamp: u128,
+    pub timestamp: u64,
 }
 
-fn get_epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+fn get_epoch_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
 }
 impl Order {
     pub fn new(
+        id: Id,
+        timestamp: u64,
         order_side: OrderSide,
         quantity: Quantity,
         is_market_maker: bool,
         user_id: Id
     ) -> Order {
-        ORDER_ID.fetch_add(1, Ordering::SeqCst);
-        let id = ORDER_ID.load(Ordering::SeqCst);
-        let timestamp = get_epoch_ms();
         Order {
             id,
             user_id,
@@ -336,7 +327,8 @@ impl Limit {
         &mut self,
         mut order: Order,
         exchange: &Exchange,
-        exchange_price: Price
+        exchange_price: Price,
+        rc: &mut Connection
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
@@ -349,58 +341,68 @@ impl Limit {
                 true => {
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
+                    let trade = match order.order_side {
+                        OrderSide::Bid =>
+                            QueueTrade {
+                                user_id_1: limit_order.user_id,
+                                user_id_2: order.user_id,
+                                exchange: exchange.clone(),
+                                base_quantity: remaining_quantity,
+                                price: exchange_price,
+                                is_market_maker: order.is_market_maker,
+                            },
+
+                        OrderSide::Ask =>
+                            QueueTrade {
+                                user_id_1: order.user_id,
+                                user_id_2: limit_order.user_id,
+                                exchange: exchange.clone(),
+                                base_quantity: remaining_quantity,
+                                price: exchange_price,
+                                is_market_maker: order.is_market_maker,
+                            },
+                    };
+                    let string = to_string(&trade).unwrap();
                     // 1) queue this, 2) update the order request db and then publish it.
-                    // let trade = match order.order_side {
-                    //     OrderSide::Bid =>
-                    //         Limit::trade(
-                    //             users,
-                    //             limit_order.user_id,
-                    //             order.user_id,
-                    //             exchange,
-                    //             remaining_quantity,
-                    //             exchange_price,
-                    //             order.is_market_maker
-                    //         ),
-                    //     OrderSide::Ask =>
-                    //         Limit::trade(
-                    //             users,
-                    //             order.user_id,
-                    //             limit_order.user_id,
-                    //             exchange,
-                    //             remaining_quantity,
-                    //             exchange_price,
-                    //             order.is_market_maker
-                    //         ),
-                    // };
-                    // trades.insert(0, trade);
+                    redis
+                        ::cmd("LPUSH")
+                        .arg(format!("queues:trade:{}", exchange.symbol))
+                        .arg(string)
+                        .query::<Value>(rc)
+                        .unwrap();
                 }
                 false => {
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
+                    let trade = match order.order_side {
+                        OrderSide::Bid =>
+                            QueueTrade {
+                                user_id_1: limit_order.user_id,
+                                user_id_2: order.user_id,
+                                exchange: exchange.clone(),
+                                base_quantity: limit_order.quantity,
+                                price: exchange_price,
+                                is_market_maker: order.is_market_maker,
+                            },
+
+                        OrderSide::Ask =>
+                            QueueTrade {
+                                user_id_1: order.user_id,
+                                user_id_2: limit_order.user_id,
+                                exchange: exchange.clone(),
+                                base_quantity: limit_order.quantity,
+                                price: exchange_price,
+                                is_market_maker: order.is_market_maker,
+                            },
+                    };
+                    let string = to_string(&trade).unwrap();
                     // 1) queue this, 2) update the order request db and then publish it.
-                    // let trade = match order.order_side {
-                    //     OrderSide::Bid =>
-                    //         Limit::trade(
-                    //             users,
-                    //             limit_order.user_id,
-                    //             order.user_id,
-                    //             exchange,
-                    //             limit_order.quantity,
-                    //             exchange_price,
-                    //             order.is_market_maker
-                    //         ),
-                    //     OrderSide::Ask =>
-                    //         Limit::trade(
-                    //             users,
-                    //             order.user_id,
-                    //             limit_order.user_id,
-                    //             exchange,
-                    //             limit_order.quantity,
-                    //             exchange_price,
-                    //             order.is_market_maker
-                    //         ),
-                    // };
-                    // trades.insert(0, trade);
+                    redis
+                        ::cmd("LPUSH")
+                        .arg(format!("queues:trade:{}", exchange.symbol))
+                        .arg(string)
+                        .query::<Value>(rc)
+                        .unwrap();
                     self.orders.remove(i);
                     continue;
                 }
@@ -419,4 +421,14 @@ impl Limit {
             .reduce(|a, b| a + b)
             .unwrap_or(dec!(0))
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct QueueTrade {
+    user_id_1: Id,
+    user_id_2: Id,
+    exchange: Exchange,
+    base_quantity: Quantity,
+    price: Price,
+    is_market_maker: bool,
 }
