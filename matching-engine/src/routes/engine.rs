@@ -21,17 +21,22 @@ use crate::{
 struct SymbolStruct{
     symbol: Symbol
 }
+#[derive(Deserialize)]
+struct NewMarket{
+    base: Asset,
+    quote: Asset
+}
 #[actix_web::post("/new_market")]
 pub async fn add_new_market(
-    body: Json<SymbolStruct>,
+    body: Json<NewMarket>,
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
     let mut redis_connection = app_state.redis_connection.lock().unwrap();
-    let exc = Exchange::from_symbol(body.symbol.clone());
-    let exchange = matching_engine.add_new_market(exc);
+    let exc = Exchange::new(body.base, body.quote);
+    let exchange = matching_engine.add_new_market(exc.clone());
     if let Ok(matching_engine) = exchange {
-        let symbol = body.symbol.clone();
+        let symbol = exc.symbol;
         let bids_key = "orderbook:".to_string() + &symbol + ":bids";
         let asks_key = "orderbook:".to_string() + &symbol + ":asks";
         // initally bids and asks are empty vec
