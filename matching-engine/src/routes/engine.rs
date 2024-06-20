@@ -51,70 +51,7 @@ pub async fn add_new_market(
     }
     actix_web::HttpResponse::Conflict().json(exchange.err())
 }
-#[derive(Serialize)]
-struct InsufficientBalanceResponse {
-    message: String,
-    asset: Asset,
-    available_balance: Decimal,
-    required_balance: Decimal,
-}
 
-#[derive(Deserialize)]
-pub struct FillLimitOrder {
-    price: Price,
-    order_side: OrderSide,
-    quantity: Quantity,
-    user_id: Id,
-    symbol: Symbol,
-}
-#[actix_web::post("/fill_limit_order")]
-pub async fn fill_limit_order(
-    body: Json<FillLimitOrder>,
-    app_state: Data<AppState>
-) -> actix_web::HttpResponse {
-    let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let exchange = Exchange::from_symbol(body.symbol.clone());
-    let price = body.price;
-    let price = body.price;
-    let order_side = body.order_side.clone();
-    let order = Order::new(order_side, body.quantity, true, body.user_id);
-    // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
-    let exchange = matching_engine.fill_limit_order(price, order, &exchange);
-    if let Ok(matching_engine) = exchange {
-        return actix_web::HttpResponse::Ok().json("Ok");
-    }
-    actix_web::HttpResponse::Conflict().json(exchange.err())
-}
-
-#[derive(Deserialize)]
-pub struct FillMarketOrder {
-    order_side: OrderSide,
-    quantity: Quantity,
-    user_id: Id,
-    symbol: Symbol,
-}
-
-#[actix_web::post("/fill_market_order")]
-pub async fn fill_market_order(
-    body: Json<FillMarketOrder>,
-    app_state: Data<AppState>
-) -> actix_web::HttpResponse {
-    let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let exchange = Exchange::from_symbol(body.symbol.clone());
-    let order_side = body.order_side.clone();
-    let quote = matching_engine.get_quote(&order_side, body.quantity, &exchange);
-    if let Err(err) = quote {
-        return actix_web::HttpResponse::BadRequest().json(err);
-    }
-
-    let order = Order::new(order_side, body.quantity, false, body.user_id);
-    // put this in the bidOrAsk queue for respective ticker e.g., BID:SOL, SELL:BTC
-    let exchange = matching_engine.fill_market_order(order, &exchange);
-    if let Ok(matching_engine) = exchange {
-        return actix_web::HttpResponse::Ok().json("Ok");
-    }
-    actix_web::HttpResponse::Conflict().json(exchange.err())
-}
 #[derive(Deserialize)]
 pub struct Quote {
     base: Asset,
