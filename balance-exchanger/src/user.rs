@@ -1,10 +1,10 @@
-use std::{collections::HashMap, error::Error, str::FromStr};
+use std::{ collections::HashMap, error::Error, str::FromStr };
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use scylla:: transport::errors::QueryError;
+use scylla::transport::errors::QueryError;
 
-use crate::{Asset, Quantity, ScyllaDb, ScyllaUser, User};
+use crate::{ Asset, Quantity, ScyllaDb, ScyllaUser, User };
 
 #[derive(Debug)]
 pub enum UserError {
@@ -49,18 +49,6 @@ impl User {
             id: self.id,
             balance: scylla_balance,
             locked_balance: scylla_locked_balance,
-        }
-    }
-    pub fn lock_amount(&mut self, asset: &Asset, quantity: Quantity) {
-        let locked_balance = self.locked_balance.get_mut(asset);
-        match locked_balance {
-            None => {
-                self.locked_balance.insert(asset.clone(), dec!(0.0));
-                *self.locked_balance.get_mut(asset).unwrap() += quantity;
-            }
-            Some(mut balance) => {
-                balance += quantity;
-            }
         }
     }
     pub fn unlock_amount(&mut self, asset: &Asset, quantity: Quantity) {
@@ -108,7 +96,7 @@ impl ScyllaDb {
         let user = scylla_user.from_scylla_user();
         Ok(user)
     }
-    pub fn update_user_statement(&self) -> &str{
+    pub fn update_user_statement(&self) -> &str {
         let s =
             r#"
             UPDATE keyspace_1.user_table 

@@ -11,7 +11,7 @@ use rust_decimal::prelude::*;
 use serde::{ Deserialize, Serialize };
 use serde_json::to_string;
 use std::{ clone, collections::HashMap };
-use super::{ engine::Exchange, error::MatchingEngineErrors, Asset, Id, Quantity };
+use super::{ engine::{ Exchange, OrderStatus }, error::MatchingEngineErrors, Asset, Id, Quantity };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
@@ -350,6 +350,10 @@ impl Limit {
                                 base_quantity: remaining_quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
+                                order_status_1: OrderStatus::Filled,
+                                order_status_2: OrderStatus::PartiallyFilled,
+                                order_id_1: order.id,
+                                order_id_2: limit_order.id,
                             },
 
                         OrderSide::Ask =>
@@ -360,16 +364,15 @@ impl Limit {
                                 base_quantity: remaining_quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
+                                order_status_1: OrderStatus::Filled,
+                                order_status_2: OrderStatus::PartiallyFilled,
+                                order_id_1: order.id,
+                                order_id_2: limit_order.id,
                             },
                     };
                     let string = to_string(&trade).unwrap();
                     // 1) queue this, 2) update the order request db and then publish it.
-                    redis
-                        ::cmd("LPUSH")
-                        .arg("queues:trade")
-                        .arg(string)
-                        .query::<Value>(rc)
-                        .unwrap();
+                    redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
                 }
                 false => {
                     remaining_quantity -= limit_order.quantity;
@@ -383,6 +386,10 @@ impl Limit {
                                 base_quantity: limit_order.quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
+                                order_status_1: OrderStatus::PartiallyFilled,
+                                order_status_2: OrderStatus::Filled,
+                                order_id_1: order.id,
+                                order_id_2: limit_order.id,
                             },
 
                         OrderSide::Ask =>
@@ -393,16 +400,15 @@ impl Limit {
                                 base_quantity: limit_order.quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
+                                order_status_1: OrderStatus::PartiallyFilled,
+                                order_status_2: OrderStatus::Filled,
+                                order_id_1: order.id,
+                                order_id_2: limit_order.id,
                             },
                     };
                     let string = to_string(&trade).unwrap();
                     // 1) queue this, 2) update the order request db and then publish it.
-                    redis
-                        ::cmd("LPUSH")
-                        .arg("queues:trade")
-                        .arg(string)
-                        .query::<Value>(rc)
-                        .unwrap();
+                    redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
                     self.orders.remove(i);
                     continue;
                 }
@@ -431,4 +437,8 @@ pub struct QueueTrade {
     base_quantity: Quantity,
     price: Price,
     is_market_maker: bool,
+    order_status_1: OrderStatus,
+    order_status_2: OrderStatus,
+    order_id_1: Id,
+    order_id_2: Id,
 }
