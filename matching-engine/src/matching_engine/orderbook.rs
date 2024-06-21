@@ -366,7 +366,7 @@ impl Limit {
                     // 1) queue this, 2) update the order request db and then publish it.
                     redis
                         ::cmd("LPUSH")
-                        .arg(format!("queues:trade:{}", exchange.symbol))
+                        .arg("queues:trade")
                         .arg(string)
                         .query::<Value>(rc)
                         .unwrap();
@@ -399,7 +399,7 @@ impl Limit {
                     // 1) queue this, 2) update the order request db and then publish it.
                     redis
                         ::cmd("LPUSH")
-                        .arg(format!("queues:trade:{}", exchange.symbol))
+                        .arg("queues:trade")
                         .arg(string)
                         .query::<Value>(rc)
                         .unwrap();
