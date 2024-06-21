@@ -100,7 +100,7 @@ impl User {
         let balance = self.balance(asset)?;
         Ok(balance - locked_balance)
     }
-    fn to_scylla_user(&self) -> ScyllaUser {
+    pub fn to_scylla_user(&self) -> ScyllaUser {
         let mut scylla_balance: HashMap<String, String> = HashMap::new();
         for (asset, balance) in &self.balance {
             scylla_balance.insert(asset.to_string(), balance.to_string());

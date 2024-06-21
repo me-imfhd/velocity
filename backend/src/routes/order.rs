@@ -1,6 +1,6 @@
-use actix_web::{ web::{ Data, Json }, HttpResponse };
+use actix_web::{ web::{ Data, Json, Query }, HttpResponse };
 use redis::Value;
-use serde::Deserialize;
+use serde::{ Deserialize, Serialize };
 use serde_json::to_string;
 
 use crate::{
@@ -26,19 +26,25 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
     let exchange = Exchange::new(body.base, body.quote);
     let user = s_db.get_user(body.user_id).await;
     match user {
-        Ok(user) => {
+        Ok(mut user) => {
             match &body.order_side {
                 OrderSide::Bid => {
                     let ava_b = user.available_balance(&exchange.quote).unwrap();
-                    if ava_b * body.quantity < body.price * body.quantity {
+                    if ava_b < body.price * body.quantity {
                         return HttpResponse::NotAcceptable().json("Insufficient balance.");
                     }
+                    user.lock_amount(&body.quote, body.quantity * body.price);
+                    s_db.update_user(&mut user).await;
+                    println!("Locked Balance");
                 }
                 OrderSide::Ask => {
                     let ava_b = user.available_balance(&exchange.base).unwrap();
                     if ava_b < body.quantity {
                         return HttpResponse::NotAcceptable().json("Insufficient balance.");
                     }
+                    user.lock_amount(&body.base, body.quantity);
+                    s_db.update_user(&mut user).await;
+                    println!("Locked Balance");
                 }
             }
         }
@@ -70,12 +76,16 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
                         .query::<Value>(con);
                     match res {
                         Ok(_) => HttpResponse::Accepted().json("Order added."),
-                        Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+                        Err(err) =>
+                            HttpResponse::InternalServerError().json(
+                                err.to_string() + " Could not make order"
+                            ),
                     }
                 }
                 Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
             }
         }
-        Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+        Err(err) =>
+            HttpResponse::InternalServerError().json(err.to_string() + " Could not make order"),
     }
 }

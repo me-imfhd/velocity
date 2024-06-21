@@ -6,7 +6,7 @@ use redis::Connection;
 use crate::{
     config::GlobalConfig,
     db::ScyllaDb,
-    routes::{ order::order, ping::ping, user::new_user },
+    routes::{ order::order, ping::ping, user::* },
 };
 
 pub struct Application {
@@ -53,6 +53,8 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
                 .service(ping)
                 .service(order)
                 .service(new_user)
+                .service(get_user)
+                .service(deposit)
         )
     })
         .listen(listener)?
