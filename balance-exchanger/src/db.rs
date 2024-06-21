@@ -15,14 +15,20 @@ impl ScyllaDb {
                 }),
         }
     }
-    pub fn get_batch_values(
+    pub fn get_order_batch_values(&self) {
+        todo!()
+    }
+    pub fn get_trade_batch_values(&self) {
+        todo!()
+    }
+    pub fn get_user_batch_values(
         &self,
         mut user_1: User,
         mut user_2: User,
         queue_trade: QueueTrade
     ) -> (
-        (HashMap<String, String>, HashMap<String, String>),
-        (HashMap<String, String>, HashMap<String, String>),
+        (HashMap<String, String>, HashMap<String, String>, i64),
+        (HashMap<String, String>, HashMap<String, String>, i64),
     ) {
         let exchange = queue_trade.exchange;
         let base_quantity = queue_trade.base_quantity;
@@ -38,22 +44,36 @@ impl ScyllaDb {
         let serializer_user_1 = user_1.to_scylla_user();
         let serializer_user_2 = user_2.to_scylla_user();
         (
-            (serializer_user_1.balance, serializer_user_1.locked_balance),
-            (serializer_user_2.balance, serializer_user_2.locked_balance),
+            (serializer_user_1.balance, serializer_user_1.locked_balance, serializer_user_1.id),
+            (serializer_user_2.balance, serializer_user_2.locked_balance, serializer_user_2.id),
         )
     }
     pub async fn exchange_balances(&self, queue_trade: QueueTrade) -> Result<(), Box<dyn Error>> {
         let mut user_1 = self.get_user(queue_trade.user_id_1 as i64).await.unwrap();
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await.unwrap();
         let mut batch: Batch = Default::default();
-        let statement_1 = self.update_user_statement();
-        let statement_2 = self.update_user_statement();
-        batch.append_statement(statement_1);
-        batch.append_statement(statement_2);
+        let user_statement_1 = self.update_user_statement();
+        let user_statement_2 = self.update_user_statement();
+
+        let order_statement_1 = self.update_order_statement();
+        let order_statement_2 = self.update_order_statement();
+
+        let trade_statement = self.trade_entry_statement();
+        batch.append_statement(user_statement_1);
+        batch.append_statement(user_statement_2);
+        // batch.append_statement(order_statement_1);
+        // batch.append_statement(order_statement_2);
+        // batch.append_statement(trade_statement);
+
         let prepared_batch: Batch = self.session.prepare_batch(&batch).await?;
 
-        let batch_values = self.get_batch_values(user_1, user_2, queue_trade);
-        self.session.batch(&prepared_batch, batch_values).await?;
+        let (user_1_values, user_2_values) = self.get_user_batch_values(
+            user_1,
+            user_2,
+            queue_trade
+        );
+
+        self.session.batch(&prepared_batch, (user_1_values, user_2_values)).await.unwrap();
         Ok(())
     }
 }
