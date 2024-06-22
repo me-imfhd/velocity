@@ -1,6 +1,6 @@
 use balance_exchanger::{ QueueTrade, ScyllaDb };
 use redis::{ Connection, Value };
-use serde_json::from_str;
+use serde_json::{ from_str, to_string };
 
 #[tokio::main]
 async fn main() {
@@ -16,8 +16,15 @@ async fn main() {
                 let queue_trade: QueueTrade = from_str(&queue_trade_string).unwrap();
                 let result = scylla_db.exchange_balances(queue_trade).await;
                 match result {
-                    Ok(trade_id) => {
-                        println!("Balance Exchanged, Orders Updated, Trade Id : {}", trade_id);
+                    Ok(trade) => {
+                        let trade_string = to_string(&trade).unwrap();
+                        redis
+                            ::cmd("PUSLISH")
+                            .arg(format!("trades:{}", trade.symbol))
+                            .arg(trade_string)
+                            .query::<Value>(con)
+                            .unwrap();
+                        println!("Balance Exchanged, Orders Updated, Trade Id : {}", trade.id);
                     }
                     Err(err) => {
                         dbg!(err);

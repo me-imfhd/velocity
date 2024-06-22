@@ -10,9 +10,9 @@ impl ScyllaDb {
         let profile = ExecutionProfile::builder().load_balancing_policy(policy).build();
         let handle = profile.into_handle();
         let session = SessionBuilder::new()
-            .known_node(format!("{}:9042",uri))
-            .known_node(format!("{}:9043",uri))
-            .known_node(format!("{}:9044",uri))
+            .known_node(format!("{}:9042", uri))
+            .known_node(format!("{}:9043", uri))
+            .known_node(format!("{}:9044", uri))
             .default_execution_profile_handle(handle)
             .compression(Some(Compression::Lz4))
             .build().await?;
@@ -50,7 +50,7 @@ impl ScyllaDb {
         &self,
         queue_trade: &QueueTrade,
         trade_id: Id
-    ) -> (i64, String, String, String, bool, String, i64) {
+    ) -> ((i64, String, String, String, bool, String, i64), Trade) {
         let trade = Trade::new(
             trade_id,
             queue_trade.is_market_maker,
@@ -60,13 +60,16 @@ impl ScyllaDb {
         );
         let serialized_trade = trade.to_scylla_trade();
         (
-            serialized_trade.id,
-            serialized_trade.symbol,
-            serialized_trade.quantity,
-            serialized_trade.quote_quantity,
-            serialized_trade.is_market_maker,
-            serialized_trade.price,
-            serialized_trade.timestamp,
+            (
+                serialized_trade.id,
+                serialized_trade.symbol,
+                serialized_trade.quantity,
+                serialized_trade.quote_quantity,
+                serialized_trade.is_market_maker,
+                serialized_trade.price,
+                serialized_trade.timestamp,
+            ),
+            trade,
         )
     }
     pub fn get_user_batch_values(
@@ -96,7 +99,10 @@ impl ScyllaDb {
             (serializer_user_2.balance, serializer_user_2.locked_balance, serializer_user_2.id),
         )
     }
-    pub async fn exchange_balances(&self, queue_trade: QueueTrade) -> Result<i64, Box<dyn Error>> {
+    pub async fn exchange_balances(
+        &self,
+        queue_trade: QueueTrade
+    ) -> Result<Trade, Box<dyn Error>> {
         let mut user_1 = self.get_user(queue_trade.user_id_1 as i64).await?;
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await?;
         let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
@@ -124,7 +130,7 @@ impl ScyllaDb {
             user_2,
             &queue_trade
         );
-        let trade_values = self.get_trade_batch_values(&queue_trade, trade_id);
+        let (trade_values, trade) = self.get_trade_batch_values(&queue_trade, trade_id);
         let (order_1_values, order_2_values) = self.get_order_batch_values(
             queue_trade,
             order_1,
@@ -138,6 +144,6 @@ impl ScyllaDb {
             order_1_values,
             order_2_values,
         )).await?;
-        Ok(trade_id)
+        Ok(trade)
     }
 }
