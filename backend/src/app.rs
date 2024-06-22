@@ -3,7 +3,11 @@ use std::{ net::TcpListener, sync::Mutex };
 use actix_web::{ web::{ self, scope }, App, HttpServer };
 use redis::Connection;
 
-use crate::{ config::GlobalConfig, db::ScyllaDb, routes::{ order::order, ping::ping, trades::trades, user::* } };
+use crate::{
+    config::GlobalConfig,
+    db::ScyllaDb,
+    routes::{ order::order, ping::ping, trades::trades, user::* },
+};
 
 pub struct Application {
     port: u16,
@@ -53,8 +57,9 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
                     scope("/user")
                         .service(new_user) // /new
                         .service(get_user) // ?id
-                        .service(deposit)  // /deposit
-                        .service(orders)   // /orders
+                        .service(deposit) // /deposit
+                        .service(withdraw) // /withdraw
+                        .service(orders) // /orders
                 )
         )
     })

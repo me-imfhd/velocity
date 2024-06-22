@@ -54,22 +54,50 @@ pub async fn deposit(body: Json<Deposit>, app_state: Data<AppState>) -> actix_we
         Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
     }
 }
+#[derive(Serialize, Deserialize)]
+struct Withdraw {
+    user_id: Id,
+    asset: Asset,
+    quantity: Quantity,
+}
+#[actix_web::post("/withdraw")]
+pub async fn withdraw(body: Json<Withdraw>, app_state: Data<AppState>) -> actix_web::HttpResponse {
+    let s_db = app_state.scylla_db.lock().unwrap();
+    let mut result = s_db.get_user(body.user_id).await;
+    match result {
+        Ok(mut user) => {
+            if body.quantity > user.available_balance(&body.asset).unwrap() {
+                return HttpResponse::NotAcceptable().json("Over Withdrawing");
+            }
+            user.withdraw(&body.asset, body.quantity);
+            s_db.update_user(&mut user).await.unwrap();
+            HttpResponse::Ok().json(user)
+        }
+        Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct UserOrders {
     user_id: Id,
 }
 #[actix_web::get("/orders")]
-pub async fn orders(query: Query<UserOrders>, app_state: Data<AppState>) -> actix_web::HttpResponse {
+pub async fn orders(
+    query: Query<UserOrders>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
     let result = s_db.get_user(query.user_id).await;
     match result {
         Ok(user) => {
-           let user_orders = s_db.get_users_orders(query.user_id).await;
-           match user_orders {
-            Ok(user_orders) => HttpResponse::Ok().json(user_orders),
-            Err(err) =>  HttpResponse::NotFound().json(format!("Orders Not Found\n {}", err.to_string())),
-           } 
+            let user_orders = s_db.get_users_orders(query.user_id).await;
+            match user_orders {
+                Ok(user_orders) => HttpResponse::Ok().json(user_orders),
+                Err(err) =>
+                    HttpResponse::NotFound().json(
+                        format!("Orders Not Found\n {}", err.to_string())
+                    ),
+            }
         }
         Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
     }
