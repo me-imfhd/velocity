@@ -75,6 +75,7 @@ impl Orderbook {
                 break;
             }
         }
+        self.save_orderbook(rc);
     }
     pub fn fill_limit_order(
         &mut self,
@@ -84,13 +85,14 @@ impl Orderbook {
         rc: &mut Connection
     ) {
         let initial_quantity = order.quantity;
-        match order.order_side {
+        let result = match order.order_side {
             OrderSide::Ask => {
                 println!("Recieved an ask order");
                 let sorted_bids = &mut Orderbook::bid_limits(&mut self.bids);
                 let mut i = 0;
                 if sorted_bids.len() == 0 {
                     self.add_limit_order(price, order);
+                    self.save_orderbook(rc);
                     return;
                 }
                 while i < sorted_bids.len() {
@@ -105,6 +107,7 @@ impl Orderbook {
                     }
                     i += 1;
                 }
+                self.save_orderbook(rc);
             }
             OrderSide::Bid => {
                 println!("Recieved an bid order");
@@ -112,6 +115,7 @@ impl Orderbook {
                 let mut i = 0;
                 if sorted_asks.len() == 0 {
                     self.add_limit_order(price, order);
+                    self.save_orderbook(rc);
                     return;
                 }
                 while i < sorted_asks.len() {
@@ -128,8 +132,10 @@ impl Orderbook {
                     }
                     i += 1;
                 }
+                self.save_orderbook(rc);
             }
         };
+       
     }
     pub fn bids_by_user(&self, user_id: Id) -> Vec<Limit> {
         let mut bids = &self.bids;
@@ -175,6 +181,20 @@ impl Orderbook {
         bids.sort_by(|a, b| b.price.cmp(&a.price));
         bids
     }
+    pub fn save_orderbook(&mut self, rc: &mut Connection) {
+        println!("Saving orderbook");
+        let asks = Orderbook::ask_limits(&mut self.asks);
+        let ask_str = to_string(&asks).unwrap();
+        let bids = Orderbook::bid_limits(&mut self.bids);
+        let bid_str = to_string(&bids).unwrap();
+        redis
+            ::cmd("MSET")
+            .arg(format!("orderbook:{}:asks", self.exchange.symbol))
+            .arg(ask_str)
+            .arg(format!("orderbook:{}:bids", self.exchange.symbol))
+            .arg(bid_str)
+            .query::<Value>(rc).unwrap();
+    }
     pub fn recover_orderbook(&mut self, redis_connection: &mut redis::Connection) {
         let symbol = &self.exchange.symbol;
         let bids_symbol = "orderbook:".to_string() + &symbol + ":bids";
@@ -199,9 +219,11 @@ impl Orderbook {
         bids_store.iter_mut().for_each(|limit| {
             bids.insert(limit.price, limit.clone());
         });
+        println!("{:#?}", self);
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
-        match order.order_side {
+        let order_side = &order.order_side.clone();
+        match order_side {
             OrderSide::Bid => {
                 let limit = self.bids.get_mut(&price);
                 match limit {
@@ -293,36 +315,6 @@ impl Limit {
         println!("Adding a new {:?} order to orderbook", &order.order_side);
         self.orders.push(order)
     }
-    // fn trade(
-    //     user_id_1: Id,
-    //     user_id_2: Id,
-    //     exchange: &Exchange,
-    //     base_quantity: Quantity,
-    //     price: Price,
-    //     is_market_maker: bool
-    // ) -> Trade {
-    //     // Perform the asset flips
-    //     users.unlock_amount(&exchange.base, user_id_1, base_quantity);
-    //     users.withdraw(&exchange.base, base_quantity, user_id_1);
-    //     users.deposit(&exchange.base, base_quantity, user_id_2);
-
-    //     users.unlock_amount(&exchange.quote, user_id_2, base_quantity * price);
-    //     users.withdraw(&exchange.quote, base_quantity * price, user_id_2);
-    //     users.deposit(&exchange.quote, base_quantity * price, user_id_1);
-
-    //     TRADE_ID.fetch_add(1, Ordering::SeqCst);
-    //     let id = TRADE_ID.load(Ordering::SeqCst);
-    //     let timestamp = get_epoch_ms();
-    //     println!("Trade occurred.");
-    //     Trade {
-    //         id,
-    //         quantity: base_quantity,
-    //         is_market_maker,
-    //         timestamp,
-    //         quote_quantity: base_quantity * price,
-    //         price,
-    //     }
-    // }
     fn fill_order(
         &mut self,
         mut order: Order,
@@ -375,6 +367,10 @@ impl Limit {
                     redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
                 }
                 false => {
+                    let limit_order_status = match limit_order.quantity == remaining_quantity {
+                        true => OrderStatus::Filled,
+                        false => OrderStatus::PartiallyFilled,
+                    };
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
                     let trade = match order.order_side {
@@ -386,7 +382,7 @@ impl Limit {
                                 base_quantity: limit_order.quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
-                                order_status_1: OrderStatus::PartiallyFilled,
+                                order_status_1: limit_order_status,
                                 order_status_2: OrderStatus::Filled,
                                 order_id_1: order.id,
                                 order_id_2: limit_order.id,
@@ -400,7 +396,7 @@ impl Limit {
                                 base_quantity: limit_order.quantity,
                                 price: exchange_price,
                                 is_market_maker: order.is_market_maker,
-                                order_status_1: OrderStatus::PartiallyFilled,
+                                order_status_1: limit_order_status,
                                 order_status_2: OrderStatus::Filled,
                                 order_id_1: order.id,
                                 order_id_2: limit_order.id,
