@@ -48,12 +48,11 @@ async fn insert_tables_all() {
 }
 #[tokio::test]
 async fn get_trade() {
-    let scylla_db = init().await;
-    let id = scylla_db.new_trade_id().await.unwrap();
-    let trade = Trade::new(id, true, dec!(10.21), dec!(20.1),"SOL_USDT".to_string());
-    scylla_db.new_trade(trade).await.unwrap();
-    let trade = scylla_db.get_trade(id).await.unwrap();
-    assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1) );
+        let scylla_db = init().await;
+        let trade = Trade::new(1, true, dec!(10.21), dec!(20.1),"SOL_USDT".to_string());
+        scylla_db.new_trade(trade).await.unwrap();
+        let trade = scylla_db.get_trade(1).await.unwrap();
+        assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1) );
 }
 #[tokio::test]
 async fn update_user() {

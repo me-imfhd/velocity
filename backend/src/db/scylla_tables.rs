@@ -36,7 +36,6 @@ impl ScyllaDb {
         CREATE TABLE IF NOT EXISTS keyspace_1.counter_table (
             id bigint PRIMARY KEY,
             user_id counter,
-            trade_id counter,
             order_id counter
         );
       "#;
