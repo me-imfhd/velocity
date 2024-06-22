@@ -76,6 +76,7 @@ pub struct User {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueueTrade {
+    trade_id: Id,
     user_id_1: Id,
     user_id_2: Id,
     exchange: Exchange,

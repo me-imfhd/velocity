@@ -49,10 +49,9 @@ impl ScyllaDb {
     pub fn get_trade_batch_values(
         &self,
         queue_trade: &QueueTrade,
-        trade_id: Id
     ) -> ((i64, String, String, String, bool, String, i64), Trade) {
         let trade = Trade::new(
-            trade_id,
+            queue_trade.trade_id,
             queue_trade.is_market_maker,
             queue_trade.price,
             queue_trade.base_quantity,
@@ -107,7 +106,6 @@ impl ScyllaDb {
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await?;
         let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
         let mut order_2 = self.get_order(queue_trade.order_id_2).await?;
-        let trade_id = self.new_trade_id().await?;
         let mut batch: Batch = Default::default();
         let user_statement_1 = self.update_user_statement();
         let user_statement_2 = self.update_user_statement();
@@ -130,7 +128,7 @@ impl ScyllaDb {
             user_2,
             &queue_trade
         );
-        let (trade_values, trade) = self.get_trade_batch_values(&queue_trade, trade_id);
+        let (trade_values, trade) = self.get_trade_batch_values(&queue_trade);
         let (order_1_values, order_2_values) = self.get_order_batch_values(
             queue_trade,
             order_1,

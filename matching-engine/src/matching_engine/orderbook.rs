@@ -15,6 +15,7 @@ use super::{ engine::{ Exchange, OrderStatus }, error::MatchingEngineErrors, Ass
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
+    pub trade_id: u64,
     pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
@@ -31,6 +32,7 @@ pub struct Trade {
 impl Orderbook {
     pub fn new(exchange: Exchange) -> Orderbook {
         Orderbook {
+            trade_id: 0,
             exchange,
             asks: HashMap::new(),
             bids: HashMap::new(),
@@ -70,7 +72,7 @@ impl Orderbook {
         println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
-            order = limit_order.fill_order(order, exchange, price, rc);
+            order = limit_order.fill_order(order, exchange, price, rc, self.trade_id);
             if order.is_filled() {
                 break;
             }
@@ -100,7 +102,7 @@ impl Orderbook {
                         self.add_limit_order(price, order);
                         break;
                     }
-                    order = sorted_bids[i].fill_order(order, exchange, price, rc);
+                    order = sorted_bids[i].fill_order(order, exchange, price, rc, self.trade_id);
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
                         break;
@@ -124,7 +126,7 @@ impl Orderbook {
                         break;
                     }
                     let price = sorted_asks[i].price.clone();
-                    order = sorted_asks[i].fill_order(order, exchange, price, rc);
+                    order = sorted_asks[i].fill_order(order, exchange, price, rc, self.trade_id);
 
                     if order.quantity > dec!(0) && sorted_asks.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
@@ -135,7 +137,6 @@ impl Orderbook {
                 self.save_orderbook(rc);
             }
         };
-       
     }
     pub fn bids_by_user(&self, user_id: Id) -> Vec<Limit> {
         let mut bids = &self.bids;
@@ -194,12 +195,16 @@ impl Orderbook {
             .arg(ask_str)
             .arg(format!("orderbook:{}:bids", self.exchange.symbol))
             .arg(bid_str)
-            .query::<Value>(rc).unwrap();
+            .arg(format!("orderbook:{}:trade_id", self.exchange.symbol))
+            .arg(self.trade_id.to_string())
+            .query::<Value>(rc)
+            .unwrap();
     }
     pub fn recover_orderbook(&mut self, redis_connection: &mut redis::Connection) {
         let symbol = &self.exchange.symbol;
         let bids_symbol = "orderbook:".to_string() + &symbol + ":bids";
         let asks_symbol = "orderbook:".to_string() + &symbol + ":asks";
+        let trade_key = "orderbook:".to_string() + &symbol + ":trade_id";
         let bids_store_str = redis
             ::cmd("GET")
             .arg(bids_symbol)
@@ -208,6 +213,11 @@ impl Orderbook {
         let asks_store_str = redis
             ::cmd("GET")
             .arg(asks_symbol)
+            .query::<String>(redis_connection)
+            .expect("Orderbook does not exist, invalid symbol");
+        let trade_id = redis
+            ::cmd("GET")
+            .arg(trade_key)
             .query::<String>(redis_connection)
             .expect("Orderbook does not exist, invalid symbol");
         let mut bids_store: Vec<Limit> = serde_json::from_str(&bids_store_str).unwrap();
@@ -220,7 +230,7 @@ impl Orderbook {
         bids_store.iter_mut().for_each(|limit| {
             bids.insert(limit.price, limit.clone());
         });
-        println!("{:#?}", self);
+        self.trade_id = trade_id.parse::<u64>().unwrap();
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         let order_side = &order.order_side.clone();
@@ -321,11 +331,13 @@ impl Limit {
         mut order: Order,
         exchange: &Exchange,
         exchange_price: Price,
-        rc: &mut Connection
+        rc: &mut Connection,
+        mut trade_id: u64
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
         while i < self.orders.len() {
+            trade_id += 1;
             if remaining_quantity == dec!(0) {
                 break;
             }
@@ -337,6 +349,7 @@ impl Limit {
                     let trade = match order.order_side {
                         OrderSide::Bid =>
                             QueueTrade {
+                                trade_id,
                                 user_id_1: limit_order.user_id,
                                 user_id_2: order.user_id,
                                 exchange: exchange.clone(),
@@ -351,6 +364,7 @@ impl Limit {
 
                         OrderSide::Ask =>
                             QueueTrade {
+                                trade_id,
                                 user_id_1: order.user_id,
                                 user_id_2: limit_order.user_id,
                                 exchange: exchange.clone(),
@@ -377,6 +391,7 @@ impl Limit {
                     let trade = match order.order_side {
                         OrderSide::Bid =>
                             QueueTrade {
+                                trade_id,
                                 user_id_1: limit_order.user_id,
                                 user_id_2: order.user_id,
                                 exchange: exchange.clone(),
@@ -391,6 +406,7 @@ impl Limit {
 
                         OrderSide::Ask =>
                             QueueTrade {
+                                trade_id,
                                 user_id_1: order.user_id,
                                 user_id_2: limit_order.user_id,
                                 exchange: exchange.clone(),
@@ -428,6 +444,7 @@ impl Limit {
 
 #[derive(Debug, Serialize)]
 pub struct QueueTrade {
+    trade_id: Id,
     user_id_1: Id,
     user_id_2: Id,
     exchange: Exchange,
