@@ -187,6 +187,7 @@ impl Orderbook {
         let ask_str = to_string(&asks).unwrap();
         let bids = Orderbook::bid_limits(&mut self.bids);
         let bid_str = to_string(&bids).unwrap();
+        // redis had automatic retries so no need to worry
         redis
             ::cmd("MSET")
             .arg(format!("orderbook:{}:asks", self.exchange.symbol))

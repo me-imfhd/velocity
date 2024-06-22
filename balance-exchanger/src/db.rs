@@ -90,7 +90,7 @@ impl ScyllaDb {
             (serializer_user_2.balance, serializer_user_2.locked_balance, serializer_user_2.id),
         )
     }
-    pub async fn exchange_balances(&self, queue_trade: QueueTrade) -> Result<(), Box<dyn Error>> {
+    pub async fn exchange_balances(&self, queue_trade: QueueTrade) -> Result<i64, Box<dyn Error>> {
         let mut user_1 = self.get_user(queue_trade.user_id_1 as i64).await?;
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await?;
         let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
@@ -132,6 +132,6 @@ impl ScyllaDb {
             order_1_values,
             order_2_values,
         )).await?;
-        Ok(())
+        Ok(trade_id)
     }
 }

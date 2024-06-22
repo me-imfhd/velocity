@@ -3,12 +3,13 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
 use serde_json::from_str;
+use strum::IntoEnumIterator;
 use strum_macros::FromRepr;
 use crate::matching_engine::Symbol;
 
 use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
-use super::{ Asset, Id, Quantity };
+use super::{ Asset, Id, Quantity, RegisteredSymbols };
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -65,9 +66,8 @@ impl MatchingEngine {
         println!("\nOrderbook recovering complete.")
     }
     pub fn registered_exchanges(&self) -> Vec<Symbol> {
-        let exchanges: Vec<Symbol> = self.orderbooks
-            .keys()
-            .map(|e| e.symbol.clone())
+        let exchanges: Vec<Symbol> = RegisteredSymbols::iter()
+            .map(|s| s.to_string())
             .collect();
         exchanges
     }

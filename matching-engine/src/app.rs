@@ -8,7 +8,7 @@ use serde::{ Deserialize, Serialize };
 use crate::{
     config::GlobalConfig,
     matching_engine::{ self, engine::MatchingEngine, orderbook::OrderSide, Id },
-    routes::{ engine::{ add_new_market, get_asks, get_bids, get_quote }, health::health_check },
+    routes::{ engine::{ get_asks, get_bids, get_quote }, health::ping },
 };
 
 pub struct Application {
@@ -63,8 +63,7 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
         App::new().service(
             scope("/api/v1")
                 .app_data(app_state.clone())
-                .service(health_check)
-                .service(add_new_market)
+                .service(ping)
                 .service(get_asks)
                 .service(get_bids)
                 .service(get_quote)
@@ -99,14 +98,14 @@ fn process_order(symbol: String, app_state: Data<AppState>, order_side: OrderSid
             match result {
                 Ok(order_string) => {
                     println!(
-                        "{} Order Recieved, poped it, symbol: {}",
+                        "{} Order Recieved, symbol: {}",
                         order_side.to_string(),
                         symbol
                     );
                     matching_engine.process_order(&order_string, con);
                 }
                 Err(_) => {
-                    println!("{}s Task queue empty, symbol: {}", order_side.to_string(), symbol);
+                    // println!("{}s Task queue empty, symbol: {}", order_side.to_string(), symbol);
                 }
             }
         }

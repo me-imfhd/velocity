@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use std::{ cell::Cell, str::FromStr, sync::atomic::{ AtomicU64, Ordering } };
 use engine::Exchange;
 use enum_stringify::EnumStringify;
@@ -30,3 +31,10 @@ impl Asset {
 pub type Symbol = String;
 pub type Id = u64;
 pub type Quantity = Decimal;
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, EnumIter, Serialize, Deserialize, EnumStringify)]
+pub enum RegisteredSymbols {
+    SOL_USDT,
+    BTC_USDT,
+    ETH_USDT
+}

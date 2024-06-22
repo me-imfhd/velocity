@@ -16,7 +16,9 @@ async fn main() {
                 let queue_trade: QueueTrade = from_str(&queue_trade_string).unwrap();
                 let result = scylla_db.exchange_balances(queue_trade).await;
                 match result {
-                    Ok(_) => {}
+                    Ok(trade_id) => {
+                        println!("Balance Exchanged, Orders Updated, Trade Id : {}", trade_id);
+                    }
                     Err(err) => {
                         dbg!(err);
                         redis
@@ -29,7 +31,7 @@ async fn main() {
                 }
             }
             Err(_) => {
-                println!("No balances to exchange");
+                // println!("No balances to exchange");
             }
         }
     }
