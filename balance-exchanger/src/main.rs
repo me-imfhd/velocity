@@ -1,5 +1,5 @@
 use balance_exchanger::{ QueueTrade, ScyllaDb };
-use redis::Connection;
+use redis::{ Connection, Value };
 use serde_json::from_str;
 
 #[tokio::main]
@@ -14,7 +14,19 @@ async fn main() {
         match result {
             Ok(queue_trade_string) => {
                 let queue_trade: QueueTrade = from_str(&queue_trade_string).unwrap();
-                let _ = scylla_db.exchange_balances(queue_trade).await;
+                let result = scylla_db.exchange_balances(queue_trade).await;
+                match result {
+                    Ok(_) => {}
+                    Err(err) => {
+                        dbg!(err);
+                        redis
+                            ::cmd("LPUSH")
+                            .arg("queues:trade")
+                            .arg(queue_trade_string)
+                            .query::<Value>(con)
+                            .unwrap();
+                    }
+                }
             }
             Err(_) => {
                 println!("No balances to exchange");
