@@ -4,7 +4,7 @@ use rust_decimal_macros::dec;
 use crate::db::{schema::*, ScyllaDb};
 
 async fn init() -> ScyllaDb {
-    let uri = "127.0.0.1:9042";
+    let uri = "127.0.0.1";
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
     scylla_db.initialize().await.unwrap();
     scylla_db

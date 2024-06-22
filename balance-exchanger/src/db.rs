@@ -1,19 +1,25 @@
-use std::{ collections::HashMap, error::Error };
-use scylla::{ batch::Batch, SessionBuilder };
+use std::{ collections::HashMap, error::Error, sync::Arc };
+use scylla::{ batch::Batch, frame::Compression, load_balancing, ExecutionProfile, SessionBuilder };
 use serde_json::from_str;
 
 use crate::{ order, Id, Order, Quantity, QueueTrade, ScyllaDb, Trade, User };
 
 impl ScyllaDb {
     pub async fn create_session(uri: &str) -> Result<ScyllaDb, Box<dyn Error>> {
-        let session = SessionBuilder::new().known_node(uri).build().await.map_err(From::from);
-        match session {
-            Err(err) => Err(err),
-            Ok(session) =>
-                Ok(ScyllaDb {
-                    session,
-                }),
-        }
+        let policy = Arc::new(load_balancing::DefaultPolicy::default());
+        let profile = ExecutionProfile::builder().load_balancing_policy(policy).build();
+        let handle = profile.into_handle();
+        let session = SessionBuilder::new()
+            .known_node(format!("{}:9042",uri))
+            .known_node(format!("{}:9043",uri))
+            .known_node(format!("{}:9044",uri))
+            .default_execution_profile_handle(handle)
+            .compression(Some(Compression::Lz4))
+            .build().await?;
+
+        Ok(ScyllaDb {
+            session,
+        })
     }
     pub fn get_order_batch_values(
         &self,

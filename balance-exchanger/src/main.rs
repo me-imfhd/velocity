@@ -4,7 +4,7 @@ use serde_json::from_str;
 
 #[tokio::main]
 async fn main() {
-    let uri = "127.0.0.1:9042";
+    let uri = "127.0.0.1";
     let redis_uri = "redis://127.0.0.1:6379";
     let mut con = connect_redis(&redis_uri);
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();

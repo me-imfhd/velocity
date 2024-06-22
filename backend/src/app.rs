@@ -37,7 +37,7 @@ pub struct AppState {
     pub redis_connection: Mutex<Connection>,
 }
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
-    let uri = "127.0.0.1:9042";
+    let uri = "127.0.0.1";
     let redis_uri = "redis://127.0.0.1:6379";
     let mut redis_connection = connect_redis(&redis_uri);
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
