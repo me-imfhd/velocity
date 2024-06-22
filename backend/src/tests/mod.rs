@@ -44,13 +44,13 @@ async fn insert_tables_all() {
         .unwrap();
     scylla_db.new_ticker(Ticker::new("SOL_USDT".to_string())).await.unwrap();
     scylla_db.new_user(User::new(scylla_db.new_user_id().await.unwrap())).await.unwrap();
-    scylla_db.new_trade(Trade::new(1, true, dec!(0.0), dec!(0.0))).await.unwrap();
+    scylla_db.new_trade(Trade::new(1, true, dec!(0.0), dec!(0.0),"SOL_USDT".to_string())).await.unwrap();
 }
 #[tokio::test]
 async fn get_trade() {
     let scylla_db = init().await;
     let id = scylla_db.new_trade_id().await.unwrap();
-    let trade = Trade::new(id, true, dec!(10.21), dec!(20.1));
+    let trade = Trade::new(id, true, dec!(10.21), dec!(20.1),"SOL_USDT".to_string());
     scylla_db.new_trade(trade).await.unwrap();
     let trade = scylla_db.get_trade(id).await.unwrap();
     assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1) );
@@ -95,9 +95,10 @@ async fn update_market() {
 async fn update_order() {
     let scylla_db = init().await;
     let order_id = scylla_db.new_order_id().await.unwrap();
+    let user_id = scylla_db.new_user_id().await.unwrap();
     let order = Order::new(
         order_id,
-        1,
+        user_id,
         dec!(100.0),
         dec!(1000),
         OrderSide::Ask,
@@ -112,6 +113,8 @@ async fn update_order() {
     scylla_db.update_order(&mut order).await.unwrap();
 
     let updated_order = scylla_db.get_order(order_id).await.unwrap();
+    let users_order = scylla_db.get_users_orders(user_id).await.unwrap();
+    println!("{:#?}", users_order);
     assert_eq!(updated_order.order_status.to_string(), OrderStatus::PartiallyFilled.to_string());
 }
 

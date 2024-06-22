@@ -79,6 +79,7 @@ impl ScyllaDb {
             r#"
         CREATE TABLE IF NOT EXISTS keyspace_1.trade_table (
             id bigint PRIMARY KEY,
+            symbol text,
             quantity text,
             quote_quantity text,
             is_market_maker boolean,
@@ -150,6 +151,7 @@ pub struct ScyllaUser {
 #[derive(Debug, Serialize, Deserialize, SerializeRow, FromRow)]
 pub struct ScyllaTrade {
     pub id: i64,
+    pub symbol: String,
     pub quantity: String,
     pub quote_quantity: String,
     pub is_market_maker: bool,

@@ -5,17 +5,24 @@ use scylla::transport::errors::QueryError;
 
 use crate::db::{
     get_epoch_ms,
-    schema::{ Price, Quantity, Trade },
+    schema::{ Price, Quantity, Symbol, Trade },
     scylla_tables::ScyllaTrade,
     ScyllaDb,
 };
 
 impl Trade {
-    pub fn new(id: i64, is_market_maker: bool, price: Price, quantity: Quantity) -> Trade {
+    pub fn new(
+        id: i64,
+        is_market_maker: bool,
+        price: Price,
+        quantity: Quantity,
+        symbol: Symbol
+    ) -> Trade {
         let timestamp = get_epoch_ms();
         let quote_quantity = price * quantity;
         Trade {
             id,
+            symbol,
             quantity: quantity,
             quote_quantity: quote_quantity,
             is_market_maker,
@@ -26,6 +33,7 @@ impl Trade {
     fn to_scylla_trade(&self) -> ScyllaTrade {
         ScyllaTrade {
             id: self.id,
+            symbol: self.symbol.to_string(),
             is_market_maker: self.is_market_maker,
             price: self.price.to_string(),
             quantity: self.quantity.to_string(),
@@ -38,6 +46,7 @@ impl ScyllaTrade {
     fn from_scylla_trade(&self) -> Trade {
         Trade {
             id: self.id,
+            symbol: self.symbol.to_string(),
             is_market_maker: self.is_market_maker,
             price: Decimal::from_str(&self.price).unwrap(),
             quantity: Decimal::from_str(&self.quantity).unwrap(),
@@ -52,22 +61,43 @@ impl ScyllaDb {
             r#"
             INSERT INTO keyspace_1.trade_table (
                 id,
+                symbol,
                 quantity,
                 quote_quantity,
                 is_market_maker,
                 price,
                 timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);
         "#;
         let trade = trade.to_scylla_trade();
         self.session.query(s, trade).await?;
         Ok(())
+    }
+    pub async fn get_trades(&self, symbol: Symbol) -> Result<Vec<Trade>, Box<dyn Error>> {
+        let s =
+            r#"
+            SELECT
+                id,
+                symbol,
+                quantity,
+                quote_quantity,
+                is_market_maker,
+                price,
+                timestamp
+            FROM keyspace_1.trade_table
+            WHERE symbol = ? ALLOW FILTERING;
+        "#;
+        let res = self.session.query(s,(symbol,)).await?;
+        let mut trades = res.rows_typed::<ScyllaTrade>()?;
+        let trades: Vec<Trade> = trades.map(|trade| trade.unwrap().from_scylla_trade()).collect();
+        Ok(trades)
     }
     pub async fn get_trade(&self, trade_id: i64) -> Result<Trade, Box<dyn Error>> {
         let s =
             r#"
             SELECT
                 id,
+                symbol,
                 quantity,
                 quote_quantity,
                 is_market_maker,

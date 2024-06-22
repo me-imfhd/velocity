@@ -168,6 +168,7 @@ impl OrderType {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Trade {
     pub id: Id,
+    pub symbol: Symbol,
     pub quantity: Quantity,
     pub quote_quantity: Quantity,
     pub is_market_maker: bool,
@@ -177,6 +178,7 @@ pub struct Trade {
 #[derive(Debug, Serialize, Deserialize, SerializeRow, FromRow)]
 pub struct ScyllaTrade {
     pub id: i64,
+    pub symbol: Symbol,
     pub quantity: String,
     pub quote_quantity: String,
     pub is_market_maker: bool,
