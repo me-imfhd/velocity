@@ -3,7 +3,7 @@ use serde::{ Deserialize, Serialize };
 
 use crate::{ api::user, app::AppState, db::schema::{ Asset, Id, Quantity, User } };
 
-#[actix_web::post("/new_user")]
+#[actix_web::post("/new")]
 pub async fn new_user(app_state: Data<AppState>) -> HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
     let result = s_db.new_user_id().await;
@@ -25,7 +25,7 @@ pub async fn new_user(app_state: Data<AppState>) -> HttpResponse {
 struct QueryId {
     id: Id,
 }
-#[actix_web::get("/get_user")]
+#[actix_web::get("")]
 pub async fn get_user(query: Query<QueryId>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
     let result = s_db.get_user(query.id).await;
@@ -50,6 +50,26 @@ pub async fn deposit(body: Json<Deposit>, app_state: Data<AppState>) -> actix_we
             user.deposit(&body.asset, body.quantity);
             s_db.update_user(&mut user).await.unwrap();
             HttpResponse::Ok().json(user)
+        }
+        Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserOrders {
+    user_id: Id,
+}
+#[actix_web::get("/orders")]
+pub async fn orders(query: Query<UserOrders>, app_state: Data<AppState>) -> actix_web::HttpResponse {
+    let s_db = app_state.scylla_db.lock().unwrap();
+    let result = s_db.get_user(query.user_id).await;
+    match result {
+        Ok(user) => {
+           let user_orders = s_db.get_users_orders(query.user_id).await;
+           match user_orders {
+            Ok(user_orders) => HttpResponse::Ok().json(user_orders),
+            Err(err) =>  HttpResponse::NotFound().json(format!("Orders Not Found\n {}", err.to_string())),
+           } 
         }
         Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
     }

@@ -86,6 +86,28 @@ impl ScyllaDb {
         self.session.query(s, order).await?;
         Ok(())
     }
+    pub async fn get_users_orders(&self, user_id: i64) -> Result<Vec<Order>, Box<dyn Error>> {
+        let s =
+            r#"
+            SELECT
+                id,
+                user_id,
+                symbol,
+                price,
+                initial_quantity,
+                filled_quantity, 
+                order_type,
+                order_side,
+                order_status,
+                timestamp
+            FROM keyspace_1.order_table
+            WHERE user_id = ? ALLOW FILTERING;
+        "#;
+        let res = self.session.query(s, (user_id,)).await?;
+        let mut orders = res.rows_typed::<ScyllaOrder>()?;
+        let orders: Vec<Order> = orders.map(|order| order.unwrap().from_scylla_order()).collect();
+        Ok(orders)
+    }
     pub async fn get_order(&self, order_id: i64) -> Result<Order, Box<dyn Error>> {
         let s =
             r#"
