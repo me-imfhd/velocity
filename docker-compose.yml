@@ -19,47 +19,47 @@ services:
     cap_add:
       - SYS_NICE
 
-  scylladb-02:
-    image: scylladb/scylla:5.2.2
-    networks:
-      scylla_net:
-        ipv4_address: 172.19.0.3
-    container_name: scylladb-02
-    ports: 
-      - 9043:9042
-    hostname: scylladb-02
-    command: "--seeds 172.19.0.2 --cpuset 1 --memory 256M --developer-mode 1 --api-address 127.0.0.1"
-    cap_add:
-      - SYS_NICE
-    healthcheck:
-      test: ["CMD-SHELL", "sh -c $(curl -s -X GET --header 'Accept: application/json' 'http://localhost:10000/storage_service/native_transport')"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    depends_on:
-      scylladb-01:
-        condition: service_healthy
+  # scylladb-02:
+  #   image: scylladb/scylla:5.2.2
+  #   networks:
+  #     scylla_net:
+  #       ipv4_address: 172.19.0.3
+  #   container_name: scylladb-02
+  #   ports: 
+  #     - 9043:9042
+  #   hostname: scylladb-02
+  #   command: "--seeds 172.19.0.2 --cpuset 1 --memory 256M --developer-mode 1 --api-address 127.0.0.1"
+  #   cap_add:
+  #     - SYS_NICE
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "sh -c $(curl -s -X GET --header 'Accept: application/json' 'http://localhost:10000/storage_service/native_transport')"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   depends_on:
+  #     scylladb-01:
+  #       condition: service_healthy
 
-  scylladb-03:
-    image: scylladb/scylla:5.2.2
-    networks:
-      scylla_net:
-        ipv4_address: 172.19.0.4
-    container_name: scylladb-03
-    ports: 
-      - 9044:9042
-    hostname: scylladb-03
-    command: "--seeds 172.19.0.2 --cpuset 2 --memory 256M --developer-mode 1 --api-address 127.0.0.1"
-    cap_add:
-      - SYS_NICE
-    healthcheck:
-      test: ["CMD-SHELL", "sh -c $(curl -s -X GET --header 'Accept: application/json' 'http://localhost:10000/storage_service/native_transport')"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    depends_on:
-      scylladb-02:
-        condition: service_healthy
+  # scylladb-03:
+  #   image: scylladb/scylla:5.2.2
+  #   networks:
+  #     scylla_net:
+  #       ipv4_address: 172.19.0.4
+  #   container_name: scylladb-03
+  #   ports: 
+  #     - 9044:9042
+  #   hostname: scylladb-03
+  #   command: "--seeds 172.19.0.2 --cpuset 2 --memory 256M --developer-mode 1 --api-address 127.0.0.1"
+  #   cap_add:
+  #     - SYS_NICE
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "sh -c $(curl -s -X GET --header 'Accept: application/json' 'http://localhost:10000/storage_service/native_transport')"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   depends_on:
+  #     scylladb-02:
+  #       condition: service_healthy
   
   redis:
     image: redis
@@ -70,7 +70,7 @@ services:
     volumes:
       - redis:/var/lib/redies/data
     depends_on:
-      scylladb-03:
+      scylladb-01:
         condition: service_healthy
 
 volumes:
