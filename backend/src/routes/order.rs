@@ -18,7 +18,12 @@ pub struct OrderParams {
     base: Asset,
     quote: Asset,
 }
-
+// steps
+// validate the order {instant but varies} >15ms
+// get last_order_id from matching engine {instant} <5-10ms
+// push the order to the queue for matching engine to process it {instant} <5-10ms
+// if redis was up order is already placed succesfully, now save the order to the db {instant but varies} >15ms
+// if redis goes down, order does not get placed, if orderbook goes down use the db to replay the orders
 #[actix_web::post("/order")]
 pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
@@ -52,37 +57,35 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
             HttpResponse::NotFound().json(err.to_string());
         }
     }
-
-    let result = s_db.new_order_id().await;
-    match result {
-        Ok(id) => {
-            let order = Order::new(
-                id,
-                body.user_id,
-                body.quantity,
-                body.price,
-                body.order_side.clone(),
-                body.order_type.clone(),
-                exchange.symbol.clone()
-            );
-            let order_serialized = to_string(&order).unwrap();
+    let response = reqwest::get("http://127.0.0.1:5000/api/v1/last_order_id").await;
+    if response.is_err() {
+        return HttpResponse::InternalServerError().json("Orderbook is down");
+    }
+    let last_order_id = response.unwrap().json::<i64>().await.unwrap(); // ping orderbook and also get order_id to place the order with
+    let order = Order::new(
+        last_order_id + 1,
+        body.user_id,
+        body.quantity,
+        body.price,
+        body.order_side.clone(),
+        body.order_type.clone(),
+        exchange.symbol.clone()
+    );
+    let order_serialized = to_string(&order).unwrap();
+    let res = redis
+        ::cmd("LPUSH") // this will place the order instantly for matching engine to process
+        .arg(format!("queues:{}", exchange.symbol))
+        .arg(order_serialized)
+        .query::<Value>(con);
+    match res {
+        Ok(_) => {
             let result = s_db.new_order(order).await;
-            match result {
-                Ok(_) => {
-                    let res = redis
-                        ::cmd("LPUSH")
-                        .arg(format!("queues:{}", exchange.symbol))
-                        .arg(order_serialized)
-                        .query::<Value>(con);
-                    match res {
-                        Ok(_) => HttpResponse::Accepted().json("Order added."),
-                        Err(err) =>
-                            HttpResponse::InternalServerError().json(
-                                err.to_string() + " Could not make order"
-                            ),
-                    }
-                }
-                Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+            if result.is_err() {
+                println!("An Order was placed but was not able to save in database."); // analytics
+            }
+            match res {
+                Ok(_) => HttpResponse::Ok().json("Order added and saved."), // 99.9 percent
+                Err(err) => HttpResponse::Accepted().json("Order added."),
             }
         }
         Err(err) =>

@@ -1,6 +1,6 @@
 use std::{ borrow::BorrowMut, sync::Arc };
 
-use actix_web::{ body, web::{ self, Data, Json, Query } };
+use actix_web::{ body, web::{ self, Data, Json, Query }, HttpResponse };
 use redis::Commands;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -18,8 +18,8 @@ use crate::{
     },
 };
 #[derive(Deserialize)]
-struct SymbolStruct{
-    symbol: Symbol
+struct SymbolStruct {
+    symbol: Symbol,
 }
 
 #[derive(Deserialize)]
@@ -42,8 +42,21 @@ pub async fn get_quote(body: Query<Quote>, app_state: Data<AppState>) -> actix_w
     }
     actix_web::HttpResponse::Conflict().json(quote.err())
 }
+#[actix_web::get("/last_order_id")]
+pub async fn last_order_id(
+    body: Query<SymbolStruct>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
+    let mut me = app_state.matching_engine.lock().unwrap();
+    let exchange = Exchange::from_symbol(body.symbol.clone());
+    let last_order_id = me.get_orderbook(&exchange).unwrap().order_id;
+    return actix_web::HttpResponse::Ok().json(last_order_id);
+}
 #[actix_web::get("/asks")]
-pub async fn get_asks(body: Query<SymbolStruct>, app_state: Data<AppState>) -> actix_web::HttpResponse {
+pub async fn get_asks(
+    body: Query<SymbolStruct>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
     let exchange = Exchange::from_symbol(body.symbol.clone());
     let asks = matching_engine.get_asks(&exchange);
@@ -53,7 +66,10 @@ pub async fn get_asks(body: Query<SymbolStruct>, app_state: Data<AppState>) -> a
     actix_web::HttpResponse::Conflict().json(asks.err())
 }
 #[actix_web::get("/bids")]
-pub async fn get_bids(body: Query<SymbolStruct>, app_state: Data<AppState>) -> actix_web::HttpResponse {
+pub async fn get_bids(
+    body: Query<SymbolStruct>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
     let exchange = Exchange::from_symbol(body.symbol.clone());
     let bids = matching_engine.get_bids(&exchange);

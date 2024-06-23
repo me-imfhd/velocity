@@ -82,7 +82,7 @@ impl ScyllaDb {
                 SET
                     filled_quantity = ?, 
                     order_status = ?
-                WHERE id = ? ;
+                WHERE id = ? IF EXISTS;
         "#;
         s
     }

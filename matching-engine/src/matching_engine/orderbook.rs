@@ -26,7 +26,8 @@ use super::{ engine::{ Exchange, OrderStatus }, error::MatchingEngineErrors, Ass
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
-    pub trade_id: i64,
+    pub trade_id: u64,
+    pub order_id: u64,
     pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
@@ -44,6 +45,7 @@ impl Orderbook {
     pub fn new(exchange: Exchange) -> Orderbook {
         Orderbook {
             trade_id: 0,
+            order_id: 0,
             exchange,
             asks: HashMap::new(),
             bids: HashMap::new(),
@@ -218,7 +220,7 @@ impl Orderbook {
         let res = session.query(s, &[]).await.unwrap();
         let mut res = res.rows_typed::<(i64,)>().unwrap();
         let trade_id = res.next().transpose().unwrap().unwrap().0;
-        self.trade_id = trade_id;
+        self.trade_id = trade_id as u64;
     }
     async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
         let current_time = get_epoch_ms() as i64;
@@ -250,7 +252,7 @@ impl Orderbook {
             match replay_order.order_type {
                 OrderType::Market => {
                     let order = Order::new(
-                        replay_order.id as u64,
+                        replay_order.id,
                         replay_order.timestamp as u64,
                         replay_order.order_side,
                         replay_order.initial_quantity,
@@ -266,7 +268,7 @@ impl Orderbook {
                 }
                 OrderType::Limit => {
                     let order = Order::new(
-                        replay_order.id as u64,
+                        replay_order.id,
                         replay_order.timestamp as u64,
                         replay_order.order_side,
                         replay_order.initial_quantity,
@@ -398,7 +400,7 @@ impl Limit {
         exchange: &Exchange,
         exchange_price: Price,
         rc: &mut Connection,
-        mut trade_id: i64,
+        mut trade_id: u64,
         should_exectute_trade: bool
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
@@ -520,7 +522,7 @@ impl Limit {
 
 #[derive(Debug, Serialize)]
 pub struct QueueTrade {
-    trade_id: i64,
+    trade_id: Id,
     user_id_1: Id,
     user_id_2: Id,
     exchange: Exchange,
@@ -548,8 +550,8 @@ pub struct SerializedOrder {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ReplayOrder {
-    pub id: i64,
-    pub user_id: i64,
+    pub id: u64,
+    pub user_id: u64,
     pub symbol: String,
     pub price: Price,
     pub initial_quantity: Quantity,
@@ -557,14 +559,14 @@ pub struct ReplayOrder {
     pub order_type: OrderType,
     pub order_side: OrderSide,
     pub order_status: OrderStatus,
-    pub timestamp: i64,
+    pub timestamp: u64,
 }
 impl SerializedOrder {
     fn from_scylla_order(&self) -> ReplayOrder {
         ReplayOrder {
-            id: self.id,
-            timestamp: self.timestamp,
-            user_id: self.user_id,
+            id: self.id as u64,
+            timestamp: self.timestamp as u64,
+            user_id: self.user_id as u64,
             symbol: self.symbol.to_string(),
             filled_quantity: Decimal::from_str(&self.filled_quantity).unwrap(),
             price: Decimal::from_str(&self.price).unwrap(),

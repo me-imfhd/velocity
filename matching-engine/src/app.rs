@@ -9,7 +9,7 @@ use serde::{ Deserialize, Serialize };
 use crate::{
     config::GlobalConfig,
     matching_engine::{ self, engine::MatchingEngine, orderbook::OrderSide, Id },
-    routes::{ engine::{ get_asks, get_bids, get_quote }, health::ping },
+    routes::{ engine::{ get_asks, get_bids, get_quote, last_order_id }, health::ping },
 };
 
 pub struct Application {
@@ -64,6 +64,7 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
             scope("/api/v1")
                 .app_data(app_state.clone())
                 .service(ping)
+                .service(last_order_id)
                 .service(get_asks)
                 .service(get_bids)
                 .service(get_quote)

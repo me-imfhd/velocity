@@ -6,7 +6,7 @@ use scylla::Session;
 use serde::{ Deserialize, Serialize };
 use serde_json::from_str;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, FromRepr};
+use strum_macros::{ EnumIter, FromRepr };
 use crate::matching_engine::Symbol;
 
 use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
@@ -54,16 +54,20 @@ impl MatchingEngine {
             orderbooks: HashMap::new(),
         }
     }
-    pub async fn recover_all_orderbooks(&mut self, session: &Session, redis_connection: &mut redis::Connection) {
+    pub async fn recover_all_orderbooks(
+        &mut self,
+        session: &Session,
+        redis_connection: &mut redis::Connection
+    ) {
         let symbols = self.registered_exchanges();
         let mut orderbooks = &mut self.orderbooks;
-        for symbol in symbols{
+        for symbol in symbols {
             println!("Recovering {:?} orderbook...", symbol);
             let exchange = Exchange::from_symbol(symbol.to_string());
             let mut orderbook = Orderbook::new(exchange.clone());
             orderbook.recover_orderbook(session, redis_connection).await;
             orderbooks.insert(exchange, orderbook);
-        };
+        }
         println!("\nOrderbook recovering complete.")
     }
     pub fn registered_exchanges(&self) -> Vec<Symbol> {
@@ -88,8 +92,10 @@ impl MatchingEngine {
                 self.fill_market_order(order, &exchange, rc);
             }
             OrderType::Limit => {
+                let mut last_order_id = self.get_orderbook(&exchange).unwrap().order_id;
+                last_order_id += 1;
                 let order = Order::new(
-                    recieved_order.id,
+                    last_order_id,
                     recieved_order.timestamp,
                     recieved_order.order_side,
                     recieved_order.initial_quantity,
