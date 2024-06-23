@@ -22,7 +22,10 @@ pub struct Exchange {
     pub quote: Asset,
     pub symbol: String,
 }
-
+#[derive(Debug, Serialize)]
+pub enum SymbolError{
+    InvalidSymbol
+}
 impl Exchange {
     pub fn new(base: Asset, quote: Asset) -> Exchange {
         let base_string = base.to_string();
@@ -34,13 +37,14 @@ impl Exchange {
             symbol,
         }
     }
-    pub fn from_symbol(symbol: Symbol) -> Exchange {
+    pub fn from_symbol(symbol: Symbol) -> Result<Exchange,SymbolError> {
         let symbols: Vec<&str> = symbol.split("_").collect();
-        let base_str = symbols.get(0).unwrap();
-        let quote_str = symbols.get(1).unwrap();
-        let base = Asset::from_str(&base_str).expect("Incorrect symbol");
-        let quote = Asset::from_str(&quote_str).expect("Incorrect symbol");
-        Exchange::new(base, quote)
+        let base_str = symbols.get(0).ok_or(SymbolError::InvalidSymbol)?;
+        let quote_str = symbols.get(1).ok_or(SymbolError::InvalidSymbol)?;
+        let base = Asset::from_str(&base_str).ok_or(SymbolError::InvalidSymbol)?;
+        let quote = Asset::from_str(&quote_str).ok_or(SymbolError::InvalidSymbol)?;
+        let exchange = Exchange::new(base, quote);
+        Ok(exchange)
     }
 }
 
@@ -63,7 +67,7 @@ impl MatchingEngine {
         let mut orderbooks = &mut self.orderbooks;
         for symbol in symbols {
             println!("Recovering {:?} orderbook...", symbol);
-            let exchange = Exchange::from_symbol(symbol.to_string());
+            let exchange = Exchange::from_symbol(symbol.to_string()).unwrap();
             let mut orderbook = Orderbook::new(exchange.clone());
             orderbook.recover_orderbook(session, redis_connection).await;
             orderbooks.insert(exchange, orderbook);
@@ -78,9 +82,11 @@ impl MatchingEngine {
     }
     pub fn process_order(&mut self, order_string: &str, rc: &mut Connection) {
         let recieved_order: RecievedOrder = from_str(order_string).unwrap();
-        let exchange = Exchange::from_symbol(recieved_order.symbol);
+        let exchange = Exchange::from_symbol(recieved_order.symbol).unwrap();
         match recieved_order.order_type {
             OrderType::Market => {
+                let mut last_order_id = &mut self.get_orderbook(&exchange).unwrap().order_id;
+                *last_order_id += 1; // incrementing the order_id for backend to pull and make new orders with increment order_ids
                 let order = Order::new(
                     recieved_order.id,
                     recieved_order.timestamp,
@@ -92,10 +98,10 @@ impl MatchingEngine {
                 self.fill_market_order(order, &exchange, rc);
             }
             OrderType::Limit => {
-                let mut last_order_id = self.get_orderbook(&exchange).unwrap().order_id;
-                last_order_id += 1;
+                let mut last_order_id = &mut self.get_orderbook(&exchange).unwrap().order_id;
+                *last_order_id += 1;
                 let order = Order::new(
-                    last_order_id,
+                    recieved_order.id,
                     recieved_order.timestamp,
                     recieved_order.order_side,
                     recieved_order.initial_quantity,

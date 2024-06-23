@@ -1,6 +1,6 @@
 use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
-use scylla::transport::errors::QueryError;
+use scylla::{ query::{ self, Query }, statement::{Consistency, SerialConsistency}, transport::errors::QueryError };
 
 use crate::{
     Id,
@@ -75,15 +75,18 @@ impl ScyllaDb {
         let order = scylla_order.from_scylla_order();
         Ok(order)
     }
-    pub fn update_order_statement(&self) -> &str {
+    pub fn update_order_statement(&self) -> Query {
         let s =
-            r#"
-                UPDATE keyspace_1.order_table 
-                SET
-                    filled_quantity = ?, 
-                    order_status = ?
+        r#"
+            UPDATE keyspace_1.order_table 
+            SET
+                filled_quantity = ?, 
+                order_status = ?
                 WHERE id = ? IF EXISTS;
         "#;
-        s
+        let mut query: Query = Query::new(s.to_string());
+        query.set_consistency(Consistency::One);
+        query.set_serial_consistency(Some(SerialConsistency::Serial));
+        query
     }
 }

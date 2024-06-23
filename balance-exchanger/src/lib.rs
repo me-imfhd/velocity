@@ -116,7 +116,7 @@ pub struct ScyllaOrder {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, EnumStringify, EnumIter)]
+#[derive(Debug, Clone, Deserialize, Serialize, EnumStringify, EnumIter)]
 pub enum OrderStatus {
     InProgress,
     Filled,

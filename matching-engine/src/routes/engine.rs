@@ -48,9 +48,14 @@ pub async fn last_order_id(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut me = app_state.matching_engine.lock().unwrap();
-    let exchange = Exchange::from_symbol(body.symbol.clone());
-    let last_order_id = me.get_orderbook(&exchange).unwrap().order_id;
-    return actix_web::HttpResponse::Ok().json(last_order_id);
+    let exchange_res = Exchange::from_symbol(body.symbol.clone());
+    match exchange_res {
+        Ok(exchange) => {
+            let last_order_id = me.get_orderbook(&exchange).unwrap().order_id;
+            return actix_web::HttpResponse::Ok().json(last_order_id);
+        }
+        Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
+    }
 }
 #[actix_web::get("/asks")]
 pub async fn get_asks(
@@ -58,12 +63,17 @@ pub async fn get_asks(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let exchange = Exchange::from_symbol(body.symbol.clone());
-    let asks = matching_engine.get_asks(&exchange);
-    if let Ok(asks) = asks {
-        return actix_web::HttpResponse::Ok().json(asks);
+    let exchange_res = Exchange::from_symbol(body.symbol.clone());
+    match exchange_res {
+        Ok(exchange) => {
+            let asks = matching_engine.get_asks(&exchange);
+            if let Ok(asks) = asks {
+                return actix_web::HttpResponse::Ok().json(asks);
+            }
+            actix_web::HttpResponse::Conflict().json(asks.err())
+        }
+        Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
     }
-    actix_web::HttpResponse::Conflict().json(asks.err())
 }
 #[actix_web::get("/bids")]
 pub async fn get_bids(
@@ -71,10 +81,15 @@ pub async fn get_bids(
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
     let mut matching_engine = app_state.matching_engine.lock().unwrap();
-    let exchange = Exchange::from_symbol(body.symbol.clone());
-    let bids = matching_engine.get_bids(&exchange);
-    if let Ok(bids) = bids {
-        return actix_web::HttpResponse::Ok().json(bids);
+    let exchange_res = Exchange::from_symbol(body.symbol.clone());
+    match exchange_res {
+        Ok(exchange) => {
+            let bids = matching_engine.get_bids(&exchange);
+            if let Ok(bids) = bids {
+                return actix_web::HttpResponse::Ok().json(bids);
+            }
+            actix_web::HttpResponse::Conflict().json(bids.err())
+        }
+        Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
     }
-    actix_web::HttpResponse::Conflict().json(bids.err())
 }

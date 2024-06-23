@@ -23,14 +23,14 @@ impl ScyllaDb {
     }
     pub fn get_order_batch_values(
         &self,
-        queue_trade: QueueTrade,
+        queue_trade: &QueueTrade,
         mut order_1: Order,
         mut order_2: Order
     ) -> ((String, String, i64), (String, String, i64)) {
         order_1.filled_quantity += queue_trade.base_quantity;
         order_2.filled_quantity += queue_trade.base_quantity;
-        order_1.order_status = queue_trade.order_status_1;
-        order_2.order_status = queue_trade.order_status_2;
+        order_1.order_status = queue_trade.order_status_1.clone();
+        order_2.order_status = queue_trade.order_status_2.clone();
         let serialized_order_1 = order_1.to_scylla_order();
         let serialized_order_2 = order_2.to_scylla_order();
         (
@@ -48,7 +48,7 @@ impl ScyllaDb {
     }
     pub fn get_trade_batch_values(
         &self,
-        queue_trade: &QueueTrade,
+        queue_trade: &QueueTrade
     ) -> ((i64, String, String, String, bool, String, i64), Trade) {
         let trade = Trade::new(
             queue_trade.trade_id,
@@ -98,28 +98,37 @@ impl ScyllaDb {
             (serializer_user_2.balance, serializer_user_2.locked_balance, serializer_user_2.id),
         )
     }
+    pub async fn update_orders(&self, queue_trade: &QueueTrade) -> Result<(), Box<dyn Error>> {
+        let order_statement_1 = self.update_order_statement();
+        let order_statement_2 = self.update_order_statement();
+        let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
+        let mut order_2 = self.get_order(queue_trade.order_id_2).await?;
+        let (order_1_values, order_2_values) = self.get_order_batch_values(
+            queue_trade,
+            order_1,
+            order_2
+        );
+        self.session.query(order_statement_1, order_1_values).await?;
+        self.session.query(order_statement_2, order_2_values).await?;
+        Ok(())
+    }
     pub async fn exchange_balances(
         &self,
         queue_trade: QueueTrade
     ) -> Result<Trade, Box<dyn Error>> {
+        self.update_orders(&queue_trade).await?;
         let mut user_1 = self.get_user(queue_trade.user_id_1 as i64).await?;
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await?;
-        let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
-        let mut order_2 = self.get_order(queue_trade.order_id_2).await?;
+
         let mut batch: Batch = Default::default();
         let user_statement_1 = self.update_user_statement();
         let user_statement_2 = self.update_user_statement();
 
         let trade_statement = self.trade_entry_statement();
 
-        let order_statement_1 = self.update_order_statement();
-        let order_statement_2 = self.update_order_statement();
-
         batch.append_statement(user_statement_1);
         batch.append_statement(user_statement_2);
         batch.append_statement(trade_statement);
-        batch.append_statement(order_statement_1);
-        batch.append_statement(order_statement_2);
 
         let prepared_batch: Batch = self.session.prepare_batch(&batch).await?;
 
@@ -129,18 +138,13 @@ impl ScyllaDb {
             &queue_trade
         );
         let (trade_values, trade) = self.get_trade_batch_values(&queue_trade);
-        let (order_1_values, order_2_values) = self.get_order_batch_values(
-            queue_trade,
-            order_1,
-            order_2
-        );
 
         self.session.batch(&prepared_batch, (
             user_1_values,
             user_2_values,
             trade_values,
-            order_1_values,
-            order_2_values,
+            // order_1_values,
+            // order_2_values,
         )).await?;
         Ok(trade)
     }

@@ -19,7 +19,7 @@ async fn main() {
                     Ok(trade) => {
                         let trade_string = to_string(&trade).unwrap();
                         redis
-                            ::cmd("PUSLISH")
+                            ::cmd("PUBLISH")
                             .arg(format!("trades:{}", trade.symbol))
                             .arg(trade_string)
                             .query::<Value>(con)

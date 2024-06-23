@@ -35,6 +35,7 @@ impl Application {
 pub struct AppState {
     pub scylla_db: Mutex<ScyllaDb>,
     pub redis_connection: Mutex<Connection>,
+    pub reqwest: Mutex<reqwest::Client>
 }
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
     let uri = "127.0.0.1";
@@ -45,6 +46,7 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
     let app_state = web::Data::new(AppState {
         scylla_db: Mutex::new(scylla_db),
         redis_connection: Mutex::new(redis_connection),
+        reqwest: Mutex::new(reqwest::Client::new())
     });
     let server = HttpServer::new(move || {
         App::new().service(

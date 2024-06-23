@@ -91,7 +91,7 @@ impl Orderbook {
                 exchange,
                 price,
                 rc,
-                self.trade_id,
+                &mut self.trade_id,
                 should_exectute_trade
             );
             if order.is_filled() {
@@ -127,7 +127,7 @@ impl Orderbook {
                         exchange,
                         price,
                         rc,
-                        self.trade_id,
+                        &mut self.trade_id,
                         should_exectute_trade
                     );
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
@@ -156,7 +156,7 @@ impl Orderbook {
                         exchange,
                         price,
                         rc,
-                        self.trade_id,
+                        &mut self.trade_id,
                         should_exectute_trade
                     );
 
@@ -261,7 +261,7 @@ impl Orderbook {
                     );
                     self.fill_market_order(
                         order,
-                        &Exchange::from_symbol(replay_order.symbol),
+                        &Exchange::from_symbol(replay_order.symbol).unwrap(),
                         rc,
                         false
                     );
@@ -278,7 +278,7 @@ impl Orderbook {
                     self.fill_limit_order(
                         replay_order.price,
                         order,
-                        &Exchange::from_symbol(replay_order.symbol),
+                        &Exchange::from_symbol(replay_order.symbol).unwrap(),
                         rc,
                         false
                     );
@@ -390,6 +390,7 @@ impl Limit {
             orders: Vec::new(),
         }
     }
+    
     fn add_order(&mut self, order: Order) {
         println!("Adding a new {:?} order to orderbook", &order.order_side);
         self.orders.push(order)
@@ -400,15 +401,12 @@ impl Limit {
         exchange: &Exchange,
         exchange_price: Price,
         rc: &mut Connection,
-        mut trade_id: u64,
+        mut trade_id: &mut u64,
         should_exectute_trade: bool
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
         while i < self.orders.len() {
-            if should_exectute_trade == false {
-                trade_id += 1;
-            }
             if remaining_quantity == dec!(0) {
                 break;
             }
@@ -418,88 +416,98 @@ impl Limit {
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
                     if should_exectute_trade == true {
-                        continue;
-                    }
-                    let trade = match order.order_side {
-                        OrderSide::Bid =>
-                            QueueTrade {
-                                trade_id,
-                                user_id_1: limit_order.user_id,
-                                user_id_2: order.user_id,
-                                exchange: exchange.clone(),
-                                base_quantity: remaining_quantity,
-                                price: exchange_price,
-                                is_market_maker: order.is_market_maker,
-                                order_status_1: OrderStatus::Filled,
-                                order_status_2: OrderStatus::PartiallyFilled,
-                                order_id_1: order.id,
-                                order_id_2: limit_order.id,
-                            },
+                        *trade_id += 1;
+                        let trade = match order.order_side {
+                            OrderSide::Bid =>
+                                QueueTrade {
+                                    trade_id: *trade_id,
+                                    user_id_1: limit_order.user_id,
+                                    user_id_2: order.user_id,
+                                    exchange: exchange.clone(),
+                                    base_quantity: remaining_quantity,
+                                    price: exchange_price,
+                                    is_market_maker: order.is_market_maker,
+                                    order_status_1: OrderStatus::Filled,
+                                    order_status_2: OrderStatus::PartiallyFilled,
+                                    order_id_1: order.id,
+                                    order_id_2: limit_order.id,
+                                },
 
-                        OrderSide::Ask =>
-                            QueueTrade {
-                                trade_id,
-                                user_id_1: order.user_id,
-                                user_id_2: limit_order.user_id,
-                                exchange: exchange.clone(),
-                                base_quantity: remaining_quantity,
-                                price: exchange_price,
-                                is_market_maker: order.is_market_maker,
-                                order_status_1: OrderStatus::Filled,
-                                order_status_2: OrderStatus::PartiallyFilled,
-                                order_id_1: order.id,
-                                order_id_2: limit_order.id,
-                            },
-                    };
-                    let string = to_string(&trade).unwrap();
-                    // 1) queue this, 2) update the order request db and then publish it.
-                    redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
+                            OrderSide::Ask =>
+                                QueueTrade {
+                                    trade_id: *trade_id,
+                                    user_id_1: order.user_id,
+                                    user_id_2: limit_order.user_id,
+                                    exchange: exchange.clone(),
+                                    base_quantity: remaining_quantity,
+                                    price: exchange_price,
+                                    is_market_maker: order.is_market_maker,
+                                    order_status_1: OrderStatus::Filled,
+                                    order_status_2: OrderStatus::PartiallyFilled,
+                                    order_id_1: order.id,
+                                    order_id_2: limit_order.id,
+                                },
+                        };
+                        let string = to_string(&trade).unwrap();
+                        // 1) queue this, 2) update the order request db and then publish it.
+                        redis
+                            ::cmd("LPUSH")
+                            .arg("queues:trade")
+                            .arg(string)
+                            .query::<Value>(rc)
+                            .unwrap();
+                    }
                 }
                 false => {
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
                     if should_exectute_trade == true {
-                        self.orders.remove(i);
-                        continue;
-                    }
-                    let limit_order_status = match limit_order.quantity == remaining_quantity {
-                        true => OrderStatus::Filled,
-                        false => OrderStatus::PartiallyFilled,
-                    };
-                    let trade = match order.order_side {
-                        OrderSide::Bid =>
-                            QueueTrade {
-                                trade_id,
-                                user_id_1: limit_order.user_id,
-                                user_id_2: order.user_id,
-                                exchange: exchange.clone(),
-                                base_quantity: limit_order.quantity,
-                                price: exchange_price,
-                                is_market_maker: order.is_market_maker,
-                                order_status_1: limit_order_status,
-                                order_status_2: OrderStatus::Filled,
-                                order_id_1: order.id,
-                                order_id_2: limit_order.id,
-                            },
+                        *trade_id += 1;
+                        let limit_order_status = match limit_order.quantity == remaining_quantity {
+                            true => OrderStatus::Filled,
+                            false => OrderStatus::PartiallyFilled,
+                        };
+                        let trade = match order.order_side {
+                            OrderSide::Bid =>
+                                QueueTrade {
+                                    trade_id: *trade_id,
+                                    user_id_1: limit_order.user_id,
+                                    user_id_2: order.user_id,
+                                    exchange: exchange.clone(),
+                                    base_quantity: limit_order.quantity,
+                                    price: exchange_price,
+                                    is_market_maker: order.is_market_maker,
+                                    order_status_1: limit_order_status,
+                                    order_status_2: OrderStatus::Filled,
+                                    order_id_1: order.id,
+                                    order_id_2: limit_order.id,
+                                },
 
-                        OrderSide::Ask =>
-                            QueueTrade {
-                                trade_id,
-                                user_id_1: order.user_id,
-                                user_id_2: limit_order.user_id,
-                                exchange: exchange.clone(),
-                                base_quantity: limit_order.quantity,
-                                price: exchange_price,
-                                is_market_maker: order.is_market_maker,
-                                order_status_1: limit_order_status,
-                                order_status_2: OrderStatus::Filled,
-                                order_id_1: order.id,
-                                order_id_2: limit_order.id,
-                            },
-                    };
-                    let string = to_string(&trade).unwrap();
-                    // 1) queue this, 2) update the order request db and then publish it.
-                    redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
+                            OrderSide::Ask =>
+                                QueueTrade {
+                                    trade_id: *trade_id,
+                                    user_id_1: order.user_id,
+                                    user_id_2: limit_order.user_id,
+                                    exchange: exchange.clone(),
+                                    base_quantity: limit_order.quantity,
+                                    price: exchange_price,
+                                    is_market_maker: order.is_market_maker,
+                                    order_status_1: limit_order_status,
+                                    order_status_2: OrderStatus::Filled,
+                                    order_id_1: order.id,
+                                    order_id_2: limit_order.id,
+                                },
+                        };
+                        let string = to_string(&trade).unwrap();
+                        // 1) queue this, 2) update the order request db and then publish it.
+                        redis
+                            ::cmd("LPUSH")
+                            .arg("queues:trade")
+                            .arg(string)
+                            .query::<Value>(rc)
+                            .unwrap();
+                    }
+
                     self.orders.remove(i);
                     continue;
                 }

@@ -25,7 +25,8 @@ impl ScyllaDb {
         {
             'class' : 'NetworkTopologyStrategy', 
             'replication_factor' : 1
-        }"#;
+        } AND TABLETS = {'enabled': false}
+        "#;
 
         self.session.query(create_keyspace, &[]).await?;
         Ok(())

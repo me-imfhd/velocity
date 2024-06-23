@@ -18,14 +18,14 @@ pub enum Asset {
     ETH,
 }
 impl Asset {
-    fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+    pub fn from_str(asset_to_match: &str) -> Option<Self> {
         for asset in Asset::iter() {
             let current_asset = asset.to_string();
             if asset_to_match.to_string() == current_asset {
-                return Ok(asset);
+                return Some(asset);
             }
         }
-        Err(())
+        None
     }
 }
 pub type Symbol = String;
