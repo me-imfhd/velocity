@@ -71,7 +71,7 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
                 Ok(_) => {
                     let res = redis
                         ::cmd("LPUSH")
-                        .arg(format!("queues:{}:{}", body.order_side.to_string(), exchange.symbol))
+                        .arg(format!("queues:{}", exchange.symbol))
                         .arg(order_serialized)
                         .query::<Value>(con);
                     match res {

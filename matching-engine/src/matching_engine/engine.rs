@@ -1,10 +1,12 @@
+use enum_stringify::EnumStringify;
 use redis::{ Commands, Connection, FromRedisValue, Value };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use scylla::Session;
 use serde::{ Deserialize, Serialize };
 use serde_json::from_str;
 use strum::IntoEnumIterator;
-use strum_macros::FromRepr;
+use strum_macros::{EnumIter, FromRepr};
 use crate::matching_engine::Symbol;
 
 use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
@@ -52,17 +54,16 @@ impl MatchingEngine {
             orderbooks: HashMap::new(),
         }
     }
-    pub fn recover_all_orderbooks(&mut self, redis_connection: &mut redis::Connection) {
+    pub async fn recover_all_orderbooks(&mut self, session: &Session, redis_connection: &mut redis::Connection) {
+        let symbols = self.registered_exchanges();
         let mut orderbooks = &mut self.orderbooks;
-        let keys = redis_connection.keys::<&str, Vec<Symbol>>("orderbook:*:bids").unwrap();
-        keys.iter().for_each(|key| {
-            let symbol = key.split(":").collect::<Vec<&str>>().get(1).unwrap().to_string();
+        for symbol in symbols{
             println!("Recovering {:?} orderbook...", symbol);
-            let exchange = Exchange::from_symbol(symbol);
+            let exchange = Exchange::from_symbol(symbol.to_string());
             let mut orderbook = Orderbook::new(exchange.clone());
-            orderbook.recover_orderbook(redis_connection);
+            orderbook.recover_orderbook(session, redis_connection).await;
             orderbooks.insert(exchange, orderbook);
-        });
+        };
         println!("\nOrderbook recovering complete.")
     }
     pub fn registered_exchanges(&self) -> Vec<Symbol> {
@@ -136,7 +137,7 @@ impl MatchingEngine {
         rc: &mut Connection
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        Ok(orderbook.fill_market_order(order, exchange, rc))
+        Ok(orderbook.fill_market_order(order, exchange, rc, true))
     }
     pub fn fill_limit_order(
         &mut self,
@@ -146,7 +147,7 @@ impl MatchingEngine {
         rc: &mut Connection
     ) -> Result<(), MatchingEngineErrors> {
         let mut orderbook = self.get_orderbook(exchange)?;
-        orderbook.fill_limit_order(price, order, exchange, rc);
+        orderbook.fill_limit_order(price, order, exchange, rc, true);
         Ok(())
     }
     // pub fn add_limit_order(
@@ -187,12 +188,23 @@ pub struct RecievedOrder {
     pub timestamp: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, EnumIter, EnumStringify)]
 pub enum OrderStatus {
     InProgress,
     Filled,
     PartiallyFilled,
     Failed,
+}
+impl OrderStatus {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in OrderStatus::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
 }
 
 fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>, Connection) {
@@ -275,11 +287,11 @@ pub mod tests {
         );
 
         let bob_order = Order::new(9, 9, OrderSide::Bid, dec!(10), true, ids[4]);
-        orderbook.fill_limit_order(dec!(50), bob_order, &exchange, &mut rc);
+        orderbook.fill_limit_order(dec!(50), bob_order, &exchange, &mut rc, false);
         assert_eq!(orderbook.bids.contains_key(&dec!(50)), true); // failed to match at best ask(88) so it should be added to orderbook
 
         let alice_order = Order::new(10, 10, OrderSide::Ask, dec!(10), true, ids[5]);
-        orderbook.fill_limit_order(dec!(201), alice_order, &exchange, &mut rc);
+        orderbook.fill_limit_order(dec!(201), alice_order, &exchange, &mut rc, false);
         assert_eq!(orderbook.asks.contains_key(&dec!(201)), true); // failed to match at best bid(101) so it should be added to orderbook
     }
 
@@ -310,7 +322,7 @@ pub mod tests {
 
         let bid_order = Order::new(5, 5, OrderSide::Bid, dec!(40), true, ids[5]);
         let bid_price_limit_1 = dec!(500);
-        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &exchange, &mut rc);
+        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &exchange, &mut rc, false);
         // For the Remaining Quantity a new order should be added for the price limit made by the order
         assert_eq!(
             orderbook.bids.get(&bid_price_limit_1).unwrap().orders.get(0).unwrap().quantity,
@@ -344,7 +356,7 @@ pub mod tests {
 
         let ask_order = Order::new(5, 5, OrderSide::Ask, dec!(40), true, ids[5]);
         let ask_price_limit_1 = dec!(300);
-        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange, &mut rc);
+        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &exchange, &mut rc, false);
         // Checkk all orders for that partically price limit is filled
         // println!("{:?}", orderbook.bids.get(&bid_price_limit_1).unwrap().orders);
         assert_eq!(
@@ -387,7 +399,7 @@ pub mod tests {
         );
 
         let market_order = Order::new(5, 5, OrderSide::Bid, dec!(40), false, ids[5]);
-        orderbook.fill_market_order(market_order, &exchange, &mut rc);
+        orderbook.fill_market_order(market_order, &exchange, &mut rc, false);
         dbg!(&orderbook.asks);
         assert_eq!(
             orderbook.asks.get(&ask_price_limit_3).unwrap().orders.get(0).unwrap().quantity,

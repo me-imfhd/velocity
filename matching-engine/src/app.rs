@@ -3,6 +3,7 @@ use rayon::prelude::*;
 
 use actix_web::{ web::{ self, scope, Data }, App, HttpServer };
 use redis::{ Commands, Connection };
+use scylla::SessionBuilder;
 use serde::{ Deserialize, Serialize };
 
 use crate::{
@@ -40,9 +41,12 @@ pub struct AppState {
 }
 async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
     let mut redis_connection = connect_redis("redis://127.0.0.1:6379");
+    let session = SessionBuilder::new()
+            .known_node("127.0.0.1:9042")
+            .build().await
+            .unwrap();
     let mut matching_engine = MatchingEngine::init();
-    matching_engine.recover_all_orderbooks(&mut redis_connection);
-
+    matching_engine.recover_all_orderbooks(&session, &mut redis_connection).await;
     let app_state = web::Data::new(AppState {
         matching_engine: Mutex::new(matching_engine),
         redis_connection: Mutex::new(redis_connection),
@@ -51,13 +55,9 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
     let matching_engine = worker_app_state.matching_engine.lock().unwrap();
     let symbols = matching_engine.registered_exchanges();
     drop(matching_engine); // if not, then it will deadlock the matching_engine mutex
-    symbols.par_iter().for_each(|symbol| {
-        let sym4asks = symbol.clone();
-        let asks_worker_app_state = worker_app_state.clone();
-        let sym4bids = symbol.clone();
-        let bids_worker_app_state = worker_app_state.clone();
-        rayon::spawn(process_order(sym4bids, bids_worker_app_state, OrderSide::Bid));
-        rayon::spawn(process_order(sym4asks, asks_worker_app_state, OrderSide::Ask));
+    symbols.iter().for_each(|symbol| {
+        let app_state = worker_app_state.clone();
+        rayon::spawn(process_order(symbol.clone(), app_state));
     });
     let server = HttpServer::new(move || {
         App::new().service(
@@ -81,9 +81,9 @@ pub fn connect_redis(url: &str) -> Connection {
     return connection;
 }
 
-fn process_order(symbol: String, app_state: Data<AppState>, order_side: OrderSide) -> impl Fn() {
+fn process_order(symbol: String, app_state: Data<AppState>) -> impl Fn() {
     move || {
-        println!("{}s Worker Thread Created For {}", order_side.to_string(), symbol);
+        println!("Worker Thread Created For {}", symbol);
         loop {
             let con = &mut app_state.redis_connection.lock().unwrap();
             // right now two orders of different exchanges might be running sequentially instead of parallely-
@@ -91,21 +91,14 @@ fn process_order(symbol: String, app_state: Data<AppState>, order_side: OrderSid
             // (maybe my guess), this can be made more performant by using mutex on each orderbook-
             // instead of locking complete matching engine,
             let mut matching_engine = app_state.matching_engine.lock().unwrap();
-            let result = redis
-                ::cmd("RPOP")
-                .arg(format!("queues:{}:{}", order_side.to_string(), symbol))
-                .query::<String>(con);
+            let result = redis::cmd("RPOP").arg(format!("queues:{}", symbol)).query::<String>(con);
             match result {
                 Ok(order_string) => {
-                    println!(
-                        "{} Order Recieved, symbol: {}",
-                        order_side.to_string(),
-                        symbol
-                    );
+                    println!("Order Recieved, symbol: {}", symbol);
                     matching_engine.process_order(&order_string, con);
                 }
                 Err(_) => {
-                    // println!("{}s Task queue empty, symbol: {}", order_side.to_string(), symbol);
+                    // println!("Task queue empty, symbol: {}", symbol);
                 }
             }
         }

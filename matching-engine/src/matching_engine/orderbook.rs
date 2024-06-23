@@ -1,21 +1,32 @@
 use std::{
     borrow::BorrowMut,
     cell::Cell,
-    sync::{ atomic::Ordering, Mutex },
+    sync::{ atomic::Ordering, Arc, Mutex },
     time::{ self, SystemTime, UNIX_EPOCH },
 };
 use enum_stringify::EnumStringify;
 use redis::{ Connection, PubSub, Value };
 use rust_decimal_macros::dec;
 use rust_decimal::prelude::*;
+use scylla::{
+    frame::Compression,
+    load_balancing,
+    ExecutionProfile,
+    FromRow,
+    SerializeRow,
+    Session,
+    SessionBuilder,
+};
 use serde::{ Deserialize, Serialize };
 use serde_json::to_string;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 use std::{ clone, collections::HashMap };
 use super::{ engine::{ Exchange, OrderStatus }, error::MatchingEngineErrors, Asset, Id, Quantity };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
-    pub trade_id: u64,
+    pub trade_id: i64,
     pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
@@ -63,7 +74,8 @@ impl Orderbook {
         &mut self,
         mut order: Order,
         exchange: &Exchange,
-        rc: &mut Connection
+        rc: &mut Connection,
+        should_exectute_trade: bool
     ) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
@@ -72,19 +84,26 @@ impl Orderbook {
         println!("Recieved an market order");
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
-            order = limit_order.fill_order(order, exchange, price, rc, self.trade_id);
+            order = limit_order.fill_order(
+                order,
+                exchange,
+                price,
+                rc,
+                self.trade_id,
+                should_exectute_trade
+            );
             if order.is_filled() {
                 break;
             }
         }
-        self.save_orderbook(rc);
     }
     pub fn fill_limit_order(
         &mut self,
         price: Price,
         mut order: Order,
         exchange: &Exchange,
-        rc: &mut Connection
+        rc: &mut Connection,
+        should_exectute_trade: bool
     ) {
         let initial_quantity = order.quantity;
         let result = match order.order_side {
@@ -94,7 +113,6 @@ impl Orderbook {
                 let mut i = 0;
                 if sorted_bids.len() == 0 {
                     self.add_limit_order(price, order);
-                    self.save_orderbook(rc);
                     return;
                 }
                 while i < sorted_bids.len() {
@@ -102,14 +120,20 @@ impl Orderbook {
                         self.add_limit_order(price, order);
                         break;
                     }
-                    order = sorted_bids[i].fill_order(order, exchange, price, rc, self.trade_id);
+                    order = sorted_bids[i].fill_order(
+                        order,
+                        exchange,
+                        price,
+                        rc,
+                        self.trade_id,
+                        should_exectute_trade
+                    );
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
                         break;
                     }
                     i += 1;
                 }
-                self.save_orderbook(rc);
             }
             OrderSide::Bid => {
                 println!("Recieved an bid order");
@@ -117,7 +141,6 @@ impl Orderbook {
                 let mut i = 0;
                 if sorted_asks.len() == 0 {
                     self.add_limit_order(price, order);
-                    self.save_orderbook(rc);
                     return;
                 }
                 while i < sorted_asks.len() {
@@ -126,7 +149,14 @@ impl Orderbook {
                         break;
                     }
                     let price = sorted_asks[i].price.clone();
-                    order = sorted_asks[i].fill_order(order, exchange, price, rc, self.trade_id);
+                    order = sorted_asks[i].fill_order(
+                        order,
+                        exchange,
+                        price,
+                        rc,
+                        self.trade_id,
+                        should_exectute_trade
+                    );
 
                     if order.quantity > dec!(0) && sorted_asks.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
@@ -134,7 +164,6 @@ impl Orderbook {
                     }
                     i += 1;
                 }
-                self.save_orderbook(rc);
             }
         };
     }
@@ -182,55 +211,82 @@ impl Orderbook {
         bids.sort_by(|a, b| b.price.cmp(&a.price));
         bids
     }
-    pub fn save_orderbook(&mut self, rc: &mut Connection) {
-        println!("Saving orderbook");
-        let asks = Orderbook::ask_limits(&mut self.asks);
-        let ask_str = to_string(&asks).unwrap();
-        let bids = Orderbook::bid_limits(&mut self.bids);
-        let bid_str = to_string(&bids).unwrap();
-        // redis had automatic retries so no need to worry
-        redis
-            ::cmd("MSET")
-            .arg(format!("orderbook:{}:asks", self.exchange.symbol))
-            .arg(ask_str)
-            .arg(format!("orderbook:{}:bids", self.exchange.symbol))
-            .arg(bid_str)
-            .arg(format!("orderbook:{}:trade_id", self.exchange.symbol))
-            .arg(self.trade_id.to_string())
-            .query::<Value>(rc)
-            .unwrap();
+    async fn recover_trade_id(&mut self, session: &Session) {
+        let s = r#"
+            SELECT COUNT(*) FROM keyspace_1.trade_table;
+                "#;
+        let res = session.query(s, &[]).await.unwrap();
+        let mut res = res.rows_typed::<(i64,)>().unwrap();
+        let trade_id = res.next().transpose().unwrap().unwrap().0;
+        self.trade_id = trade_id;
     }
-    pub fn recover_orderbook(&mut self, redis_connection: &mut redis::Connection) {
+    async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
+        let current_time = get_epoch_ms() as i64;
+        let since = 1000 * 60 * 60 * 24; // 24 hours in millis
+        let from_time = current_time - since;
+        let s =
+            r#"
+        SELECT
+            id,
+            user_id,
+            symbol,
+            price,
+            initial_quantity,
+            filled_quantity, 
+            order_type,
+            order_side,
+            order_status,
+            timestamp
+        FROM keyspace_1.order_table
+        WHERE timestamp > ? ALLOW FILTERING;
+    "#;
+        let res = session.query(s, (from_time,)).await.unwrap();
+        let mut orders = res.rows_typed::<SerializedOrder>().unwrap();
+        let replay_orders: Vec<ReplayOrder> = orders
+            .map(|order| order.unwrap().from_scylla_order())
+            .collect();
         let symbol = &self.exchange.symbol;
-        let bids_symbol = "orderbook:".to_string() + &symbol + ":bids";
-        let asks_symbol = "orderbook:".to_string() + &symbol + ":asks";
-        let trade_key = "orderbook:".to_string() + &symbol + ":trade_id";
-        let bids_store_str = redis
-            ::cmd("GET")
-            .arg(bids_symbol)
-            .query::<String>(redis_connection)
-            .expect("Orderbook does not exist, invalid symbol");
-        let asks_store_str = redis
-            ::cmd("GET")
-            .arg(asks_symbol)
-            .query::<String>(redis_connection)
-            .expect("Orderbook does not exist, invalid symbol");
-        let trade_id = redis
-            ::cmd("GET")
-            .arg(trade_key)
-            .query::<String>(redis_connection)
-            .expect("Orderbook does not exist, invalid symbol");
-        let mut bids_store: Vec<Limit> = serde_json::from_str(&bids_store_str).unwrap();
-        let mut asks_store: Vec<Limit> = serde_json::from_str(&asks_store_str).unwrap();
-        let mut asks = &mut self.asks;
-        let mut bids = &mut self.bids;
-        asks_store.iter_mut().for_each(|limit| {
-            asks.insert(limit.price, limit.clone());
-        });
-        bids_store.iter_mut().for_each(|limit| {
-            bids.insert(limit.price, limit.clone());
-        });
-        self.trade_id = trade_id.parse::<u64>().unwrap();
+        for replay_order in replay_orders {
+            match replay_order.order_type {
+                OrderType::Market => {
+                    let order = Order::new(
+                        replay_order.id as u64,
+                        replay_order.timestamp as u64,
+                        replay_order.order_side,
+                        replay_order.initial_quantity,
+                        true,
+                        replay_order.user_id as u64
+                    );
+                    self.fill_market_order(
+                        order,
+                        &Exchange::from_symbol(replay_order.symbol),
+                        rc,
+                        false
+                    );
+                }
+                OrderType::Limit => {
+                    let order = Order::new(
+                        replay_order.id as u64,
+                        replay_order.timestamp as u64,
+                        replay_order.order_side,
+                        replay_order.initial_quantity,
+                        true,
+                        replay_order.user_id as u64
+                    );
+                    self.fill_limit_order(
+                        replay_order.price,
+                        order,
+                        &Exchange::from_symbol(replay_order.symbol),
+                        rc,
+                        false
+                    );
+                }
+            }
+        }
+    }
+    pub async fn recover_orderbook(&mut self, session: &Session, rc: &mut redis::Connection) {
+        self.recover_trade_id(&session).await;
+        self.replay_orders(rc, &session).await;
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         let order_side = &order.order_side.clone();
@@ -261,12 +317,22 @@ impl Orderbook {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, EnumIter, EnumStringify)]
 pub enum OrderType {
     Market,
     Limit,
 }
-
+impl OrderType {
+    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
+        for asset in OrderType::iter() {
+            let current_asset = asset.to_string();
+            if asset_to_match.to_string() == current_asset {
+                return Ok(asset);
+            }
+        }
+        Err(())
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, EnumStringify)]
 pub enum OrderSide {
     Bid,
@@ -332,12 +398,15 @@ impl Limit {
         exchange: &Exchange,
         exchange_price: Price,
         rc: &mut Connection,
-        mut trade_id: u64
+        mut trade_id: i64,
+        should_exectute_trade: bool
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
         while i < self.orders.len() {
-            trade_id += 1;
+            if should_exectute_trade == false {
+                trade_id += 1;
+            }
             if remaining_quantity == dec!(0) {
                 break;
             }
@@ -346,6 +415,9 @@ impl Limit {
                 true => {
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
+                    if should_exectute_trade == true {
+                        continue;
+                    }
                     let trade = match order.order_side {
                         OrderSide::Bid =>
                             QueueTrade {
@@ -382,12 +454,16 @@ impl Limit {
                     redis::cmd("LPUSH").arg("queues:trade").arg(string).query::<Value>(rc).unwrap();
                 }
                 false => {
+                    remaining_quantity -= limit_order.quantity;
+                    order.quantity -= limit_order.quantity;
+                    if should_exectute_trade == true {
+                        self.orders.remove(i);
+                        continue;
+                    }
                     let limit_order_status = match limit_order.quantity == remaining_quantity {
                         true => OrderStatus::Filled,
                         false => OrderStatus::PartiallyFilled,
                     };
-                    remaining_quantity -= limit_order.quantity;
-                    order.quantity -= limit_order.quantity;
                     let trade = match order.order_side {
                         OrderSide::Bid =>
                             QueueTrade {
@@ -444,7 +520,7 @@ impl Limit {
 
 #[derive(Debug, Serialize)]
 pub struct QueueTrade {
-    trade_id: Id,
+    trade_id: i64,
     user_id_1: Id,
     user_id_2: Id,
     exchange: Exchange,
@@ -455,4 +531,47 @@ pub struct QueueTrade {
     order_status_2: OrderStatus,
     order_id_1: Id,
     order_id_2: Id,
+}
+
+#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
+pub struct SerializedOrder {
+    pub id: i64,
+    pub user_id: i64,
+    pub symbol: String,
+    pub price: String,
+    pub initial_quantity: String,
+    pub filled_quantity: String,
+    pub order_type: String,
+    pub order_side: String,
+    pub order_status: String,
+    pub timestamp: i64,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ReplayOrder {
+    pub id: i64,
+    pub user_id: i64,
+    pub symbol: String,
+    pub price: Price,
+    pub initial_quantity: Quantity,
+    pub filled_quantity: Quantity,
+    pub order_type: OrderType,
+    pub order_side: OrderSide,
+    pub order_status: OrderStatus,
+    pub timestamp: i64,
+}
+impl SerializedOrder {
+    fn from_scylla_order(&self) -> ReplayOrder {
+        ReplayOrder {
+            id: self.id,
+            timestamp: self.timestamp,
+            user_id: self.user_id,
+            symbol: self.symbol.to_string(),
+            filled_quantity: Decimal::from_str(&self.filled_quantity).unwrap(),
+            price: Decimal::from_str(&self.price).unwrap(),
+            initial_quantity: Decimal::from_str(&self.initial_quantity).unwrap(),
+            order_side: OrderSide::from_str(&self.order_side).unwrap(),
+            order_status: OrderStatus::from_str(&self.order_status).unwrap(),
+            order_type: OrderType::from_str(&self.order_type).unwrap(),
+        }
+    }
 }
