@@ -4,14 +4,14 @@ use scylla::transport::errors::QueryError;
 
 use crate::db::{
     get_epoch_ms,
-    schema::{ Id, Order, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol },
+    schema::{ Id, Order, OrderId, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol },
     scylla_tables::ScyllaOrder,
     ScyllaDb,
 };
 
 impl Order {
     pub fn new(
-        id: Id,
+        id: uuid::Uuid,
         user_id: Id,
         initial_quantity: Quantity,
         price: Price,
@@ -108,7 +108,7 @@ impl ScyllaDb {
         let orders: Vec<Order> = orders.map(|order| order.unwrap().from_scylla_order()).collect();
         Ok(orders)
     }
-    pub async fn get_order(&self, order_id: i64) -> Result<Order, Box<dyn Error>> {
+    pub async fn get_order(&self, order_id: OrderId) -> Result<Order, Box<dyn Error>> {
         let s =
             r#"
             SELECT

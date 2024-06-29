@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use crate::db::{schema::*, ScyllaDb};
+use crate::db::{ schema::*, ScyllaDb };
 
 async fn init() -> ScyllaDb {
     let uri = "127.0.0.1";
@@ -14,51 +14,18 @@ async fn is_able_to_create_tables() {
     init().await;
 }
 #[tokio::test]
-async fn insert_tables_all() {
-    let scylla_db = init().await;
-    scylla_db
-        .new_market(
-            Market::new(
-                "SOL_USDT".to_string(),
-                Decimal::NEGATIVE_ONE,
-                dec!(0.01),
-                dec!(0.01),
-                Decimal::NEGATIVE_ONE,
-                dec!(0.0001),
-                dec!(0.0001)
-            )
-        ).await
-        .unwrap();
-    scylla_db
-        .new_order(
-            Order::new(
-                scylla_db.new_order_id().await.unwrap(),
-                1,
-                dec!(100.0),
-                dec!(1000),
-                OrderSide::Ask,
-                OrderType::Limit,
-                "SOL_USDT".to_string()
-            )
-        ).await
-        .unwrap();
-    scylla_db.new_ticker(Ticker::new("SOL_USDT".to_string())).await.unwrap();
-    scylla_db.new_user(User::new(scylla_db.new_user_id().await.unwrap())).await.unwrap();
-    scylla_db.new_trade(Trade::new(1, true, dec!(0.0), dec!(0.0),"SOL_USDT".to_string())).await.unwrap();
-}
-#[tokio::test]
 async fn get_trade() {
-        let scylla_db = init().await;
-        let trade = Trade::new(1, true, dec!(10.21), dec!(20.1),"SOL_USDT".to_string());
-        scylla_db.new_trade(trade).await.unwrap();
-        let trade = scylla_db.get_trade(1).await.unwrap();
-        assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1) );
+    let scylla_db = init().await;
+    let trade = Trade::new(1, true, dec!(10.21), dec!(20.1), "SOL_USDT".to_string());
+    scylla_db.new_trade(trade).await.unwrap();
+    let trade = scylla_db.get_trade(1).await.unwrap();
+    assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1));
 }
 #[tokio::test]
 async fn update_user() {
     let scylla_db = init().await;
     let amount = dec!(20.0);
-    let user_id = scylla_db.new_user_id().await.unwrap();
+    let user_id = 1;
     scylla_db.new_user(User::new(user_id)).await.unwrap();
     let mut user = scylla_db.get_user(user_id).await.unwrap();
     user.deposit(&Asset::SOL, amount);
@@ -93,8 +60,8 @@ async fn update_market() {
 #[tokio::test]
 async fn update_order() {
     let scylla_db = init().await;
-    let order_id = scylla_db.new_order_id().await.unwrap();
-    let user_id = scylla_db.new_user_id().await.unwrap();
+    let order_id = uuid::Uuid::new_v4();
+    let user_id = 2;
     let order = Order::new(
         order_id,
         user_id,

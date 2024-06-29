@@ -1,6 +1,6 @@
 use crate::result::Result;
 
-use super::ScyllaDb;
+use super::{ schema::OrderId, ScyllaDb };
 use std::collections::HashMap;
 
 use scylla::{ FromRow, SerializeRow };
@@ -14,7 +14,6 @@ impl ScyllaDb {
         self.create_trade_table().await?;
         self.create_market_table().await?;
         self.create_ticker_table().await?;
-        self.create_counter_table().await?;
 
         Ok(())
     }
@@ -29,18 +28,6 @@ impl ScyllaDb {
         "#;
 
         self.session.query(create_keyspace, &[]).await?;
-        Ok(())
-    }
-    async fn create_counter_table(&self) -> Result<()> {
-        let create_counter_table: &str =
-            r#"
-        CREATE TABLE IF NOT EXISTS keyspace_1.counter_table (
-            id bigint PRIMARY KEY,
-            user_id counter,
-            order_id counter
-        );
-      "#;
-        self.session.query(create_counter_table, &[]).await?;
         Ok(())
     }
     async fn create_user_table(&self) -> Result<()> {
@@ -59,7 +46,7 @@ impl ScyllaDb {
         let create_order_table: &str =
             r#"
         CREATE TABLE IF NOT EXISTS keyspace_1.order_table (
-            id bigint PRIMARY KEY,
+            id uuid PRIMARY KEY,
             user_id bigint,
             symbol text,
             price text,
@@ -130,7 +117,7 @@ impl ScyllaDb {
 
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaOrder {
-    pub id: i64,
+    pub id: OrderId,
     pub user_id: i64,
     pub symbol: String,
     pub price: String,

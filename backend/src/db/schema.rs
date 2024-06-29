@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::{ collections::HashMap, error::Error };
 use enum_stringify::EnumStringify;
 use rust_decimal::Decimal;
 use serde::{ Deserialize, Serialize };
@@ -6,13 +6,14 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub type Id = i64;
+pub type OrderId = uuid::Uuid;
 pub type Symbol = String;
 pub type Quantity = Decimal;
 pub type Price = Decimal;
 
 #[derive(Debug, Serialize)]
-pub enum SymbolError{
-    InvalidSymbol
+pub enum SymbolError {
+    InvalidSymbol,
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub struct Exchange {
@@ -31,7 +32,7 @@ impl Exchange {
             symbol,
         }
     }
-    pub fn from_symbol(symbol: Symbol) -> Result<Exchange,SymbolError> {
+    pub fn from_symbol(symbol: Symbol) -> Result<Exchange, SymbolError> {
         let symbols: Vec<&str> = symbol.split("_").collect();
         let base_str = symbols.get(0).ok_or(SymbolError::InvalidSymbol)?;
         let quote_str = symbols.get(1).ok_or(SymbolError::InvalidSymbol)?;
@@ -112,7 +113,7 @@ impl Asset {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Order {
-    pub id: Id,
+    pub id: OrderId,
     pub user_id: Id,
     pub symbol: Symbol,
     pub price: Price,
@@ -126,7 +127,7 @@ pub struct Order {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct User {
-    pub id: Id,
+    pub id: i64,
     pub balance: HashMap<Asset, Quantity>,
     pub locked_balance: HashMap<Asset, Quantity>,
 }

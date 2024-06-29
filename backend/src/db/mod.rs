@@ -22,9 +22,9 @@ impl ScyllaDb {
         let profile = ExecutionProfile::builder().load_balancing_policy(policy).build();
         let handle = profile.into_handle();
         let session = SessionBuilder::new()
-            .known_node(format!("{}:9042",uri))
-            .known_node(format!("{}:9043",uri))
-            .known_node(format!("{}:9044",uri))
+            .known_node(format!("{}:9042", uri))
+            .known_node(format!("{}:9043", uri))
+            .known_node(format!("{}:9044", uri))
             .default_execution_profile_handle(handle)
             .compression(Some(Compression::Lz4))
             .build().await?;
@@ -34,48 +34,13 @@ impl ScyllaDb {
         })
     }
     pub async fn new_user_id(&self) -> Result<i64, Box<dyn Error>> {
-        let s =
-            r#"
-            UPDATE keyspace_1.counter_table 
-            SET user_id = user_id + 1 
-            WHERE id = 1;
-        "#;
-        self.session.query(s, &[]).await?;
-        let s =
-            r#"
-            SELECT user_id
-            FROM keyspace_1.counter_table
-            WHERE id = 1;
+        let s = r#"
+        SELECT COUNT(*) FROM keyspace_1.user_table;
             "#;
         let res = self.session.query(s, &[]).await?;
-        let mut iter = res.rows_typed::<(Counter,)>()?;
-        let id = iter
-            .next()
-            .transpose()?
-            .ok_or(QueryError::InvalidMessage("Does not exist in db".to_string()))?;
-        Ok(id.0.0)
-    }
-    pub async fn new_order_id(&self) -> Result<i64, Box<dyn Error>> {
-        let s =
-            r#"
-            UPDATE keyspace_1.counter_table 
-            SET order_id = order_id + 1 
-            WHERE id = 1;
-        "#;
-        self.session.query(s, &[]).await?;
-        let s =
-            r#"
-            SELECT order_id
-            FROM keyspace_1.counter_table
-            WHERE id = 1;
-            "#;
-        let res = self.session.query(s, &[]).await?;
-        let mut iter = res.rows_typed::<(Counter,)>()?;
-        let id = iter
-            .next()
-            .transpose()?
-            .ok_or(QueryError::InvalidMessage("Does not exist in db".to_string()))?;
-        Ok(id.0.0)
+        let mut res = res.rows_typed::<(i64,)>()?;
+        let total_users = res.next().transpose()?.unwrap().0;
+        Ok(total_users + 1)
     }
 }
 pub fn get_epoch_ms() -> u128 {

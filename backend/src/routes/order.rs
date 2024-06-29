@@ -2,6 +2,7 @@ use actix_web::{ web::{ Data, Json, Query }, HttpResponse };
 use redis::Value;
 use serde::{ Deserialize, Serialize };
 use serde_json::to_string;
+use uuid::Uuid;
 
 use crate::{
     app::AppState,
@@ -29,13 +30,7 @@ pub struct OrderParams {
 pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let exchange = Exchange::new(body.base, body.quote);
     let reqwest = app_state.reqwest.lock().unwrap();
-    let response = reqwest
-        .get(format!("http://127.0.0.1:5000/api/v1/last_order_id?symbol={}", exchange.symbol))
-        .send().await;
-    if response.is_err() {
-        return HttpResponse::InternalServerError().json("Orderbook is down");
-    }
-    let last_order_id = response.unwrap().json::<i64>().await.unwrap(); // ping orderbook and also get order_id to place the order with
+    let last_order_id = Uuid::new_v4();
     let s_db = app_state.scylla_db.lock().unwrap();
     let con = &mut app_state.redis_connection.lock().unwrap();
     let user = s_db.get_user(body.user_id).await;
@@ -62,7 +57,7 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
                 }
             }
             let order = Order::new(
-                last_order_id + 1,
+                last_order_id,
                 body.user_id,
                 body.quantity,
                 body.price,

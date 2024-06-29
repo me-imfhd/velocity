@@ -30,4 +30,4 @@ strum_macros = "0.26.4"
 tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-uuid = "1.8.0"
+uuid = { version = "1.9.1", features = ["serde", "v4"] }
