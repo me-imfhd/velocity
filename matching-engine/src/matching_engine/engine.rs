@@ -192,6 +192,8 @@ impl MatchingEngine {
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RecievedOrder {
+    #[serde(skip)]
+    pub id: OrderId,
     pub user_id: Id,
     pub symbol: Symbol,
     pub price: Price,

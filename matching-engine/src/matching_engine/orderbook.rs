@@ -226,7 +226,16 @@ impl Orderbook {
         let res = session.query(s, &[]).await.unwrap();
         let mut res = res.rows_typed::<(i64,)>().unwrap();
         let trade_id = res.next().transpose().unwrap().unwrap().0;
-        self.trade_id = trade_id as u64 + 1;
+        self.trade_id = trade_id as u64;
+    }
+    async fn recover_order_id(&mut self, session: &Session) {
+        let s = r#"
+            SELECT COUNT(*) FROM keyspace_1.order_table;
+                "#;
+        let res = session.query(s, &[]).await.unwrap();
+        let mut res = res.rows_typed::<(i64,)>().unwrap();
+        let order_id = res.next().transpose().unwrap().unwrap().0;
+        self.order_id = order_id as u64;
     }
     async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
         let current_time = get_epoch_ms() as i64;
@@ -251,9 +260,10 @@ impl Orderbook {
         let symbol = &self.exchange.symbol;
         let res = session.query(s, (from_time, symbol)).await.unwrap();
         let mut orders = res.rows_typed::<SerializedOrder>().unwrap();
-        let replay_orders: Vec<ReplayOrder> = orders
+        let mut replay_orders: Vec<ReplayOrder> = orders
             .map(|order| order.unwrap().from_scylla_order())
             .collect();
+        replay_orders.reverse();
         for replay_order in replay_orders {
             match replay_order.order_type {
                 OrderType::Market => {
@@ -294,7 +304,9 @@ impl Orderbook {
     }
     pub async fn recover_orderbook(&mut self, session: &Session, rc: &mut redis::Connection) {
         self.recover_trade_id(&session).await;
+        self.recover_order_id(&session).await;
         self.replay_orders(rc, &session).await;
+
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         let order_side = &order.order_side.clone();

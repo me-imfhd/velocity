@@ -113,7 +113,6 @@ impl Asset {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Order {
-    #[serde(skip)]
     pub id: OrderId,
     pub user_id: Id,
     pub symbol: Symbol,

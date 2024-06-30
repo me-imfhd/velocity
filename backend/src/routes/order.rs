@@ -56,7 +56,7 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
                     }
                 }
                 let order = Order::new(
-                    0, // this field will be skipped
+                    0, // this field will be skipped when deserialzing
                     body.user_id,
                     body.quantity,
                     body.price,
