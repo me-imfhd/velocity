@@ -7,7 +7,6 @@ use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
 
 use crate::{
-    app::{ self, AppState },
     matching_engine::{
         engine::Exchange,
         orderbook::{ Order, OrderSide, Price },
@@ -15,7 +14,7 @@ use crate::{
         Id,
         Quantity,
         Symbol,
-    },
+    }, AppState,
 };
 #[derive(Deserialize)]
 struct SymbolStruct {
@@ -41,21 +40,6 @@ pub async fn get_quote(body: Query<Quote>, app_state: Data<AppState>) -> actix_w
         return actix_web::HttpResponse::Ok().json(quote);
     }
     actix_web::HttpResponse::Conflict().json(quote.err())
-}
-#[actix_web::get("/last_order_id")]
-pub async fn last_order_id(
-    body: Query<SymbolStruct>,
-    app_state: Data<AppState>
-) -> actix_web::HttpResponse {
-    let mut me = app_state.matching_engine.lock().unwrap();
-    let exchange_res = Exchange::from_symbol(body.symbol.clone());
-    match exchange_res {
-        Ok(exchange) => {
-            let last_order_id = me.get_orderbook(&exchange).unwrap().order_id;
-            return actix_web::HttpResponse::Ok().json(last_order_id);
-        }
-        Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
-    }
 }
 #[actix_web::get("/asks")]
 pub async fn get_asks(
