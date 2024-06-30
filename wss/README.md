@@ -1,6 +1,6 @@
 Create Websocket connection with: 
 ```
-let ws = new WebSocket("http://127.0.0.1:8080")
+let ws = new WebSocket("http://127.0.0.1:9000")
 ```
 
 Subscribe for trades with: 

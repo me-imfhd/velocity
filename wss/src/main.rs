@@ -8,7 +8,7 @@ use wss::{ handshake, trade_manager::TradeManager, Event, Method, Payload, Regis
 
 #[tokio::main]
 async fn main() {
-    let addr = "127.0.0.1:8080".to_string();
+    let addr = "127.0.0.1:9000".to_string();
     let client = redis::Client::open("redis://127.0.0.1/").expect("Could not create client");
     let mut con = client.get_connection().expect("Could not connect");
 
