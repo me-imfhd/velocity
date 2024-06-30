@@ -1,6 +1,8 @@
+use std::time::{Duration, Instant};
+
 use balance_exchanger::{ QueueTrade, ScyllaDb };
 use redis::{ Connection, Value };
-use serde_json::{ from_str, to_string };
+use serde_json::from_str;
 
 #[tokio::main]
 async fn main() {
@@ -14,22 +16,18 @@ async fn main() {
         match result {
             Ok(queue_trade_string) => {
                 let queue_trade: QueueTrade = from_str(&queue_trade_string).unwrap();
-                let result = scylla_db.exchange_balances(queue_trade).await;
+                tokio::time::sleep(Duration::from_millis(10)).await; // wait for order to be saved, to avoid unnecessary refilling the queue
+                let start = Instant::now();
+                let result = scylla_db.batch_update(queue_trade).await;
                 match result {
                     Ok(trade) => {
-                        let trade_string = to_string(&trade).unwrap();
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("trades:{}", trade.symbol))
-                            .arg(trade_string)
-                            .query::<Value>(con)
-                            .unwrap();
-                        println!("Balance Exchanged, Orders Updated, Trade Id : {}", trade.id);
+                        println!("Balance Exchanged, Orders Updated, Trade Id : {} in {} ms", trade.id, start.elapsed().as_millis());
                     }
                     Err(err) => {
-                        dbg!(err);
+                        eprintln!("{}", err);
+                        // retry
                         redis
-                            ::cmd("LPUSH")
+                            ::cmd("RPUSH") 
                             .arg("queues:trade")
                             .arg(queue_trade_string)
                             .query::<Value>(con)

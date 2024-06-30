@@ -1,18 +1,13 @@
 use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
-use scylla::{ query::{ self, Query }, statement::{Consistency, SerialConsistency}, transport::errors::QueryError };
+use scylla::{
+    query::{ self, Query },
+    statement::{ Consistency, SerialConsistency },
+    transport::errors::QueryError,
+};
 
 use crate::{
-    Id,
-    Order,
-    OrderSide,
-    OrderStatus,
-    OrderType,
-    Price,
-    Quantity,
-    ScyllaDb,
-    ScyllaOrder,
-    Symbol,
+    Id, Order, OrderId, OrderSide, OrderStatus, OrderType, Price, Quantity, ScyllaDb, ScyllaOrder, Symbol
 };
 
 impl Order {
@@ -49,7 +44,7 @@ impl ScyllaOrder {
 }
 
 impl ScyllaDb {
-    pub async fn get_order(&self, order_id: i64) -> Result<Order, Box<dyn Error>> {
+    pub async fn get_order(&self, order_id: OrderId) -> Result<Order, Box<dyn Error>> {
         let s =
             r#"
             SELECT
@@ -75,18 +70,15 @@ impl ScyllaDb {
         let order = scylla_order.from_scylla_order();
         Ok(order)
     }
-    pub fn update_order_statement(&self) -> Query {
+    pub fn update_order_statement(&self) -> &str {
         let s =
-        r#"
+            r#"
             UPDATE keyspace_1.order_table 
             SET
                 filled_quantity = ?, 
                 order_status = ?
-                WHERE id = ? IF EXISTS;
+                WHERE id = ?;
         "#;
-        let mut query: Query = Query::new(s.to_string());
-        query.set_consistency(Consistency::One);
-        query.set_serial_consistency(Some(SerialConsistency::Serial));
-        query
+        s
     }
 }

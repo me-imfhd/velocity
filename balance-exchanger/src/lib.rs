@@ -31,6 +31,7 @@ impl Asset {
 }
 pub type Symbol = String;
 pub type Id = i64;
+pub type OrderId = i64;
 pub type Quantity = Decimal;
 pub type Price = Decimal;
 #[derive(Debug, Serialize, Deserialize)]
@@ -85,13 +86,13 @@ pub struct QueueTrade {
     is_market_maker: bool,
     order_status_1: OrderStatus,
     order_status_2: OrderStatus,
-    order_id_1: Id,
-    order_id_2: Id,
+    order_id_1: OrderId,
+    order_id_2: OrderId,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Order {
-    pub id: Id,
+    pub id: OrderId,
     pub user_id: Id,
     pub symbol: Symbol,
     pub price: Price,
@@ -104,7 +105,7 @@ pub struct Order {
 }
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaOrder {
-    pub id: i64,
+    pub id: OrderId,
     pub user_id: i64,
     pub symbol: String,
     pub price: String,
