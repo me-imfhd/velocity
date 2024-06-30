@@ -46,7 +46,7 @@ impl ScyllaDb {
         let create_order_table: &str =
             r#"
         CREATE TABLE IF NOT EXISTS keyspace_1.order_table (
-            id uuid PRIMARY KEY,
+            id bigint PRIMARY KEY,
             user_id bigint,
             symbol text,
             price text,

@@ -11,7 +11,7 @@ use crate::db::{
 
 impl Order {
     pub fn new(
-        id: uuid::Uuid,
+        id: OrderId,
         user_id: Id,
         initial_quantity: Quantity,
         price: Price,

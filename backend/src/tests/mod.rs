@@ -60,7 +60,7 @@ async fn update_market() {
 #[tokio::test]
 async fn update_order() {
     let scylla_db = init().await;
-    let order_id = uuid::Uuid::new_v4();
+    let order_id = 999;
     let user_id = 2;
     let order = Order::new(
         order_id,

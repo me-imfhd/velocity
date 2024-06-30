@@ -6,7 +6,7 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub type Id = i64;
-pub type OrderId = uuid::Uuid;
+pub type OrderId = i64;
 pub type Symbol = String;
 pub type Quantity = Decimal;
 pub type Price = Decimal;
@@ -113,6 +113,7 @@ impl Asset {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Order {
+    #[serde(skip)]
     pub id: OrderId,
     pub user_id: Id,
     pub symbol: Symbol,
