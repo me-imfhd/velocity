@@ -22,7 +22,14 @@ use serde_json::to_string;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use std::{ clone, collections::HashMap };
-use super::{ engine::{ Exchange, OrderStatus }, error::MatchingEngineErrors, Asset, Id, Quantity };
+use super::{
+    engine::{ Exchange, OrderStatus },
+    error::MatchingEngineErrors,
+    Asset,
+    Id,
+    OrderId,
+    Quantity,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
@@ -83,7 +90,7 @@ impl Orderbook {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
             OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
         };
-        println!("Recieved an market order");
+        println!("Recived an {} Market order", order.order_side);
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
             order = limit_order.fill_order(
@@ -107,10 +114,10 @@ impl Orderbook {
         rc: &mut Connection,
         should_exectute_trade: bool
     ) {
+        println!("Recived an {} Limit order", order.order_side);
         let initial_quantity = order.quantity;
         let result = match order.order_side {
             OrderSide::Ask => {
-                println!("Recieved an ask order");
                 let sorted_bids = &mut Orderbook::bid_limits(&mut self.bids);
                 let mut i = 0;
                 if sorted_bids.len() == 0 {
@@ -138,7 +145,6 @@ impl Orderbook {
                 }
             }
             OrderSide::Bid => {
-                println!("Recieved an bid order");
                 let sorted_asks = &mut Orderbook::ask_limits(&mut self.asks);
                 let mut i = 0;
                 if sorted_asks.len() == 0 {
@@ -220,7 +226,7 @@ impl Orderbook {
         let res = session.query(s, &[]).await.unwrap();
         let mut res = res.rows_typed::<(i64,)>().unwrap();
         let trade_id = res.next().transpose().unwrap().unwrap().0;
-        self.trade_id = trade_id as u64;
+        self.trade_id = trade_id as u64 + 1;
     }
     async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
         let current_time = get_epoch_ms() as i64;
@@ -240,14 +246,14 @@ impl Orderbook {
             order_status,
             timestamp
         FROM keyspace_1.order_table
-        WHERE timestamp > ? ALLOW FILTERING;
+        WHERE timestamp > ? AND symbol = ? ALLOW FILTERING;
     "#;
-        let res = session.query(s, (from_time,)).await.unwrap();
+        let symbol = &self.exchange.symbol;
+        let res = session.query(s, (from_time, symbol)).await.unwrap();
         let mut orders = res.rows_typed::<SerializedOrder>().unwrap();
         let replay_orders: Vec<ReplayOrder> = orders
             .map(|order| order.unwrap().from_scylla_order())
             .collect();
-        let symbol = &self.exchange.symbol;
         for replay_order in replay_orders {
             match replay_order.order_type {
                 OrderType::Market => {
@@ -343,7 +349,7 @@ pub enum OrderSide {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
-    pub id: Id,
+    pub id: OrderId,
     pub user_id: Id,
     pub quantity: Quantity,
     pub order_side: OrderSide,
@@ -356,7 +362,7 @@ fn get_epoch_ms() -> u64 {
 }
 impl Order {
     pub fn new(
-        id: Id,
+        id: OrderId,
         timestamp: u64,
         order_side: OrderSide,
         quantity: Quantity,
@@ -390,9 +396,8 @@ impl Limit {
             orders: Vec::new(),
         }
     }
-    
+
     fn add_order(&mut self, order: Order) {
-        println!("Adding a new {:?} order to orderbook", &order.order_side);
         self.orders.push(order)
     }
     fn fill_order(
@@ -413,6 +418,7 @@ impl Limit {
             let limit_order = &mut self.orders[i];
             match limit_order.quantity > remaining_quantity {
                 true => {
+                    println!("\tAn order was matched");
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
                     if should_exectute_trade == true {
@@ -448,17 +454,21 @@ impl Limit {
                                     order_id_2: limit_order.id,
                                 },
                         };
-                        let string = to_string(&trade).unwrap();
-                        // 1) queue this, 2) update the order request db and then publish it.
+                        let serialized_trade = to_string(&trade).unwrap();
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("trades:{}", trade.exchange.symbol))
+                            .arg(serialized_trade.clone())
+                            .query::<Value>(rc);
                         redis
                             ::cmd("LPUSH")
                             .arg("queues:trade")
-                            .arg(string)
-                            .query::<Value>(rc)
-                            .unwrap();
+                            .arg(serialized_trade)
+                            .query::<Value>(rc);
                     }
                 }
                 false => {
+                    println!("\tAn order was matched");
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
                     if should_exectute_trade == true {
@@ -498,14 +508,17 @@ impl Limit {
                                     order_id_2: limit_order.id,
                                 },
                         };
-                        let string = to_string(&trade).unwrap();
-                        // 1) queue this, 2) update the order request db and then publish it.
+                        let serialized_trade = to_string(&trade).unwrap();
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("trades:{}", trade.exchange.symbol))
+                            .arg(serialized_trade.clone())
+                            .query::<Value>(rc);
                         redis
                             ::cmd("LPUSH")
                             .arg("queues:trade")
-                            .arg(string)
-                            .query::<Value>(rc)
-                            .unwrap();
+                            .arg(serialized_trade)
+                            .query::<Value>(rc);
                     }
 
                     self.orders.remove(i);
@@ -539,13 +552,13 @@ pub struct QueueTrade {
     is_market_maker: bool,
     order_status_1: OrderStatus,
     order_status_2: OrderStatus,
-    order_id_1: Id,
-    order_id_2: Id,
+    order_id_1: OrderId,
+    order_id_2: OrderId,
 }
 
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct SerializedOrder {
-    pub id: i64,
+    pub id: OrderId,
     pub user_id: i64,
     pub symbol: String,
     pub price: String,
@@ -558,7 +571,7 @@ pub struct SerializedOrder {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ReplayOrder {
-    pub id: u64,
+    pub id: OrderId,
     pub user_id: u64,
     pub symbol: String,
     pub price: Price,
@@ -572,7 +585,7 @@ pub struct ReplayOrder {
 impl SerializedOrder {
     fn from_scylla_order(&self) -> ReplayOrder {
         ReplayOrder {
-            id: self.id as u64,
+            id: self.id,
             timestamp: self.timestamp as u64,
             user_id: self.user_id as u64,
             symbol: self.symbol.to_string(),
