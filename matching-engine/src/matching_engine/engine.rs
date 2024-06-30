@@ -11,7 +11,7 @@ use crate::matching_engine::Symbol;
 
 use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
 use super::error::MatchingEngineErrors;
-use super::{ Asset, Id, Quantity, RegisteredSymbols };
+use super::{ Asset, Id, OrderId, Quantity, RegisteredSymbols };
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -23,8 +23,8 @@ pub struct Exchange {
     pub symbol: String,
 }
 #[derive(Debug, Serialize)]
-pub enum SymbolError{
-    InvalidSymbol
+pub enum SymbolError {
+    InvalidSymbol,
 }
 impl Exchange {
     pub fn new(base: Asset, quote: Asset) -> Exchange {
@@ -37,7 +37,7 @@ impl Exchange {
             symbol,
         }
     }
-    pub fn from_symbol(symbol: Symbol) -> Result<Exchange,SymbolError> {
+    pub fn from_symbol(symbol: Symbol) -> Result<Exchange, SymbolError> {
         let symbols: Vec<&str> = symbol.split("_").collect();
         let base_str = symbols.get(0).ok_or(SymbolError::InvalidSymbol)?;
         let quote_str = symbols.get(1).ok_or(SymbolError::InvalidSymbol)?;
@@ -80,15 +80,21 @@ impl MatchingEngine {
             .collect();
         exchanges
     }
-    pub fn process_order(&mut self, order_string: &str, rc: &mut Connection) {
-        let recieved_order: RecievedOrder = from_str(order_string).unwrap();
-        let exchange = Exchange::from_symbol(recieved_order.symbol).unwrap();
+    pub fn increment_order_id(&mut self, exchange: &Exchange) -> OrderId {
+        self.get_orderbook(exchange).unwrap().order_id += 1;
+        self.get_orderbook(exchange).unwrap().order_id as i64
+    }
+    pub fn process_order(
+        &mut self,
+        recieved_order: RecievedOrder,
+        order_id: i64,
+        exchange: &Exchange,
+        rc: &mut Connection
+    ) {
         match recieved_order.order_type {
             OrderType::Market => {
-                let mut last_order_id = &mut self.get_orderbook(&exchange).unwrap().order_id;
-                *last_order_id += 1; // incrementing the order_id for backend to pull and make new orders with increment order_ids
                 let order = Order::new(
-                    recieved_order.id,
+                    order_id,
                     recieved_order.timestamp,
                     recieved_order.order_side,
                     recieved_order.initial_quantity,
@@ -98,10 +104,8 @@ impl MatchingEngine {
                 self.fill_market_order(order, &exchange, rc);
             }
             OrderType::Limit => {
-                let mut last_order_id = &mut self.get_orderbook(&exchange).unwrap().order_id;
-                *last_order_id += 1;
                 let order = Order::new(
-                    recieved_order.id,
+                    order_id,
                     recieved_order.timestamp,
                     recieved_order.order_side,
                     recieved_order.initial_quantity,
@@ -186,9 +190,8 @@ impl MatchingEngine {
         Ok(Orderbook::bid_limits(&mut orderbook.bids))
     }
 }
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RecievedOrder {
-    pub id: Id,
     pub user_id: Id,
     pub symbol: Symbol,
     pub price: Price,
@@ -199,8 +202,12 @@ pub struct RecievedOrder {
     pub order_status: OrderStatus,
     pub timestamp: u64,
 }
-
-#[derive(Debug, Deserialize, Serialize, EnumIter, EnumStringify)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SaveOrder {
+    pub id: OrderId,
+    pub recieved_order: RecievedOrder,
+}
+#[derive(Debug, Clone, Deserialize, Serialize, EnumIter, EnumStringify)]
 pub enum OrderStatus {
     InProgress,
     Filled,
