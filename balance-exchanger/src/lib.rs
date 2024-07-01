@@ -88,6 +88,7 @@ pub struct QueueTrade {
     order_status_2: OrderStatus,
     order_id_1: OrderId,
     order_id_2: OrderId,
+    timestamp: u128
 }
 
 #[derive(Debug, Deserialize, Serialize)]

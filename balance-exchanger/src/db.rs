@@ -55,7 +55,8 @@ impl ScyllaDb {
             queue_trade.is_market_maker,
             queue_trade.price,
             queue_trade.base_quantity,
-            queue_trade.exchange.symbol.to_string()
+            queue_trade.exchange.symbol.to_string(),
+            queue_trade.timestamp
         );
         let serialized_trade = trade.to_scylla_trade();
         (

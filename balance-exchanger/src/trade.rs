@@ -11,9 +11,9 @@ impl Trade {
         is_market_maker: bool,
         price: Price,
         quantity: Quantity,
-        symbol: Symbol
+        symbol: Symbol,
+        timestamp: u128,
     ) -> Trade {
-        let timestamp = get_epoch_ms();
         let quote_quantity = price * quantity;
         Trade {
             id,
