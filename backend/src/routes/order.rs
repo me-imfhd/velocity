@@ -22,17 +22,14 @@ pub struct OrderParams {
     base: Asset,
     quote: Asset,
 }
-// steps
-// validate and lock balance {instant but varies}  ~3-7ms
-// push the order to the queue for matching engine to process it {instant} less than ~0ms
-// locally its takes ~5-7ms on avg
+// BENCHMARK: On an nice sunny day, its 3-9 ms
 #[actix_web::post("/order")]
 pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_web::HttpResponse {
     let start = Instant::now();
     let exchange = Exchange::new(body.base, body.quote);
     let s_db = app_state.scylla_db.lock().unwrap();
     let con = &mut app_state.redis_connection.lock().unwrap();
-    // processing this by blocking the thread so that there is no race condition when locking balances
+    // Note: We can still take orders asynchronously, but its being processed synchronously to avoid locking balance again and again
     let response = block_on(async move {
         let user = s_db.get_user(body.user_id).await;
         match user {
@@ -84,6 +81,6 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
         }
     });
     let end = start.elapsed().as_millis();
-    println!("Placed order in {} ms", end);
+    println!("Time took {} ms", end);
     response
 }
