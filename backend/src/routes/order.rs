@@ -30,6 +30,7 @@ pub async fn order(body: Json<OrderParams>, app_state: Data<AppState>) -> actix_
     let s_db = app_state.scylla_db.lock().unwrap();
     let con = &mut app_state.redis_connection.lock().unwrap();
     // Note: We can still take orders asynchronously, but its being processed synchronously to avoid locking balance again and again
+    // To increase perfomance at scale we can have seperate threads for each market and for each market we can have two threads for bids and asks seperately
     let response = block_on(async move {
         let user = s_db.get_user(body.user_id).await;
         match user {
