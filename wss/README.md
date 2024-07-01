@@ -1,33 +1,37 @@
-Create Websocket connection with: 
+## Websocket streams
+
+### Create Websocket connection
 ```
 let ws = new WebSocket("http://127.0.0.1:9000")
 ```
 
-Subscribe for trades with: 
+### Subscribe to trades, ticker and depth streams
 ```
+
 let payload = {
     method: "SUBSCRIBE",
-    event: "TRADE",
+    event: EVENT, // here event is "TRADE", "TICKER", "DEPTH"
     symbol: "SOL_USDT"
 };
 
 ws.send(JSON.stringify(payload));
 ```
 
-Listen for messages with:
-```
-ws.onmessage = function(event) {
-    console.log('Received:', event.data);
-};
-```
-
-Unsubscribe for trades with:
+### Subscribe to live order updates
 ```
 let payload = {
-    method: "UNSUBSCRIBE",
-    event: "TRADE",
+    user_id: your_user_id,
+    method: "SUBSCRIBE",
+    event: "ORDER_STATUS",
     symbol: "SOL_USDT"
 };
 
 ws.send(JSON.stringify(payload));
+```
+
+### Listen for messages
+```
+ws.onmessage = function(event) {
+    console.log('Received:', JSON.parse(event.data));
+};
 ```
