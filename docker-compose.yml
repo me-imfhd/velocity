@@ -18,7 +18,7 @@ services:
     command: "--seeds 172.19.0.2 --cpuset 0 --memory 256M --developer-mode 1 --api-address 127.0.0.1"
     cap_add:
       - SYS_NICE
-
+  # Uncomment these to run various nodes in distributed fashion
   # scylladb-02:
   #   image: scylladb/scylla:5.2.2
   #   networks:
