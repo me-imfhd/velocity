@@ -5,6 +5,7 @@ use std::{
     time::{ self, SystemTime, UNIX_EPOCH },
 };
 use enum_stringify::EnumStringify;
+use error::MatchingEngineErrors;
 use redis::{ Connection, PubSub, Value };
 use rust_decimal_macros::dec;
 use rust_decimal::prelude::*;
@@ -22,15 +23,7 @@ use serde_json::to_string;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use std::{ clone, collections::HashMap };
-use super::{
-    engine::{ Exchange, OrderStatus },
-    error::MatchingEngineErrors,
-    Asset,
-    Id,
-    OrderId,
-    Quantity,
-};
-
+use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
     pub trade_id: u64,
@@ -38,15 +31,6 @@ pub struct Orderbook {
     pub exchange: Exchange,
     pub asks: HashMap<Price, Limit>,
     pub bids: HashMap<Price, Limit>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Trade {
-    id: Id,
-    quantity: Quantity,
-    quote_quantity: Quantity,
-    is_market_maker: bool,
-    timestamp: u128,
-    price: Price,
 }
 impl Orderbook {
     pub fn new(exchange: Exchange) -> Orderbook {
@@ -306,7 +290,6 @@ impl Orderbook {
         self.recover_trade_id(&session).await;
         self.recover_order_id(&session).await;
         self.replay_orders(rc, &session).await;
-
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         let order_side = &order.order_side.clone();
@@ -337,32 +320,11 @@ impl Orderbook {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, EnumIter, EnumStringify)]
-pub enum OrderType {
-    Market,
-    Limit,
-}
-impl OrderType {
-    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
-        for asset in OrderType::iter() {
-            let current_asset = asset.to_string();
-            if asset_to_match.to_string() == current_asset {
-                return Ok(asset);
-            }
-        }
-        Err(())
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize, EnumStringify)]
-pub enum OrderSide {
-    Bid,
-    Ask,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub id: OrderId,
     pub user_id: Id,
+    pub initial_quantity: Quantity,
     pub quantity: Quantity,
     pub order_side: OrderSide,
     pub is_market_maker: bool,
@@ -371,6 +333,9 @@ pub struct Order {
 
 fn get_epoch_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+}
+fn get_epoch_micro() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros()
 }
 impl Order {
     pub fn new(
@@ -385,6 +350,7 @@ impl Order {
             id,
             user_id,
             order_side,
+            initial_quantity: quantity,
             quantity,
             is_market_maker,
             timestamp,
@@ -394,7 +360,6 @@ impl Order {
         self.quantity == dec!(0)
     }
 }
-pub type Price = Decimal;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Limit {
     pub price: Price,
@@ -435,6 +400,7 @@ impl Limit {
                     order.quantity = dec!(0);
                     if should_exectute_trade == true {
                         *trade_id += 1;
+                        let timestamp = get_epoch_micro();
                         let trade = match order.order_side {
                             OrderSide::Bid =>
                                 QueueTrade {
@@ -449,6 +415,7 @@ impl Limit {
                                     order_status_2: OrderStatus::PartiallyFilled,
                                     order_id_1: order.id,
                                     order_id_2: limit_order.id,
+                                    timestamp,
                                 },
 
                             OrderSide::Ask =>
@@ -464,13 +431,61 @@ impl Limit {
                                     order_status_2: OrderStatus::PartiallyFilled,
                                     order_id_1: order.id,
                                     order_id_2: limit_order.id,
+                                    timestamp,
                                 },
                         };
+                        let order_update_1 = OrderUpdate {
+                            order_id: trade.order_id_1,
+                            client_order_id: trade.order_id_2,
+                            executed_quantity: trade.base_quantity,
+                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_side: order.order_side.clone(),
+                            order_status: trade.order_status_1.clone(),
+                            price: trade.price,
+                            symbol: trade.exchange.symbol.clone(),
+                            trade_id: trade.trade_id,
+                            trade_timestamp: timestamp,
+                            user_id: order.user_id,
+                        };
+                        let order_update_2 = OrderUpdate {
+                            order_id: trade.order_id_2,
+                            client_order_id: trade.order_id_1,
+                            executed_quantity: trade.base_quantity,
+                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_side: limit_order.order_side.clone(),
+                            order_status: trade.order_status_1.clone(),
+                            price: trade.price,
+                            symbol: trade.exchange.symbol.clone(),
+                            trade_id: trade.trade_id,
+                            trade_timestamp: timestamp,
+                            user_id: limit_order.user_id,
+                        };
+                        let publish_trade = Trade {
+                            id: trade.trade_id,
+                            is_market_maker: trade.is_market_maker,
+                            price: trade.price,
+                            quantity: trade.base_quantity,
+                            quote_quantity: trade.price * trade.base_quantity,
+                            timestamp: timestamp,
+                        };
                         let serialized_trade = to_string(&trade).unwrap();
+                        let serialized_order_update_1 = to_string(&order_update_1).unwrap();
+                        let serialized_order_update_2 = to_string(&order_update_2).unwrap();
+                        let serialized_publish_trade = to_string(&publish_trade).unwrap();
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("order_update:{}", trade.exchange.symbol))
+                            .arg(serialized_order_update_1)
+                            .query::<Value>(rc);
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("order_update:{}", trade.exchange.symbol))
+                            .arg(serialized_order_update_2)
+                            .query::<Value>(rc);
                         redis
                             ::cmd("PUBLISH")
                             .arg(format!("trades:{}", trade.exchange.symbol))
-                            .arg(serialized_trade.clone())
+                            .arg(serialized_publish_trade)
                             .query::<Value>(rc);
                         redis
                             ::cmd("LPUSH")
@@ -489,6 +504,7 @@ impl Limit {
                             true => OrderStatus::Filled,
                             false => OrderStatus::PartiallyFilled,
                         };
+                        let timestamp = get_epoch_micro();
                         let trade = match order.order_side {
                             OrderSide::Bid =>
                                 QueueTrade {
@@ -499,10 +515,11 @@ impl Limit {
                                     base_quantity: limit_order.quantity,
                                     price: exchange_price,
                                     is_market_maker: order.is_market_maker,
-                                    order_status_1: limit_order_status,
-                                    order_status_2: OrderStatus::Filled,
+                                    order_status_1: OrderStatus::Filled,
+                                    order_status_2: limit_order_status,
                                     order_id_1: order.id,
                                     order_id_2: limit_order.id,
+                                    timestamp,
                                 },
 
                             OrderSide::Ask =>
@@ -514,17 +531,65 @@ impl Limit {
                                     base_quantity: limit_order.quantity,
                                     price: exchange_price,
                                     is_market_maker: order.is_market_maker,
-                                    order_status_1: limit_order_status,
-                                    order_status_2: OrderStatus::Filled,
+                                    order_status_1: OrderStatus::Filled,
+                                    order_status_2: limit_order_status,
                                     order_id_1: order.id,
                                     order_id_2: limit_order.id,
+                                    timestamp,
                                 },
                         };
+                        let order_update_1 = OrderUpdate {
+                            order_id: trade.order_id_1,
+                            client_order_id: trade.order_id_2,
+                            executed_quantity: trade.base_quantity,
+                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_side: order.order_side.clone(),
+                            order_status: trade.order_status_1.clone(),
+                            price: trade.price,
+                            symbol: trade.exchange.symbol.clone(),
+                            trade_id: trade.trade_id,
+                            trade_timestamp: timestamp,
+                            user_id: order.user_id,
+                        };
+                        let order_update_2 = OrderUpdate {
+                            order_id: trade.order_id_2,
+                            client_order_id: trade.order_id_1,
+                            executed_quantity: trade.base_quantity,
+                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_side: limit_order.order_side.clone(),
+                            order_status: trade.order_status_1.clone(),
+                            price: trade.price,
+                            symbol: trade.exchange.symbol.clone(),
+                            trade_id: trade.trade_id,
+                            trade_timestamp: timestamp,
+                            user_id: limit_order.user_id,
+                        };
+                        let publish_trade = Trade {
+                            id: trade.trade_id,
+                            is_market_maker: trade.is_market_maker,
+                            price: trade.price,
+                            quantity: trade.base_quantity,
+                            quote_quantity: trade.price * trade.base_quantity,
+                            timestamp: timestamp,
+                        };
                         let serialized_trade = to_string(&trade).unwrap();
+                        let serialized_order_update_1 = to_string(&order_update_1).unwrap();
+                        let serialized_order_update_2 = to_string(&order_update_2).unwrap();
+                        let serialized_publish_trade = to_string(&publish_trade).unwrap();
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("order_update:{}", trade.exchange.symbol))
+                            .arg(serialized_order_update_1)
+                            .query::<Value>(rc);
+                        redis
+                            ::cmd("PUBLISH")
+                            .arg(format!("order_update:{}", trade.exchange.symbol))
+                            .arg(serialized_order_update_2)
+                            .query::<Value>(rc);
                         redis
                             ::cmd("PUBLISH")
                             .arg(format!("trades:{}", trade.exchange.symbol))
-                            .arg(serialized_trade.clone())
+                            .arg(serialized_publish_trade)
                             .query::<Value>(rc);
                         redis
                             ::cmd("LPUSH")
@@ -550,63 +615,5 @@ impl Limit {
             .map(|order| order.quantity)
             .reduce(|a, b| a + b)
             .unwrap_or(dec!(0))
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct QueueTrade {
-    trade_id: Id,
-    user_id_1: Id,
-    user_id_2: Id,
-    exchange: Exchange,
-    base_quantity: Quantity,
-    price: Price,
-    is_market_maker: bool,
-    order_status_1: OrderStatus,
-    order_status_2: OrderStatus,
-    order_id_1: OrderId,
-    order_id_2: OrderId,
-}
-
-#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
-pub struct SerializedOrder {
-    pub id: OrderId,
-    pub user_id: i64,
-    pub symbol: String,
-    pub price: String,
-    pub initial_quantity: String,
-    pub filled_quantity: String,
-    pub order_type: String,
-    pub order_side: String,
-    pub order_status: String,
-    pub timestamp: i64,
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ReplayOrder {
-    pub id: OrderId,
-    pub user_id: u64,
-    pub symbol: String,
-    pub price: Price,
-    pub initial_quantity: Quantity,
-    pub filled_quantity: Quantity,
-    pub order_type: OrderType,
-    pub order_side: OrderSide,
-    pub order_status: OrderStatus,
-    pub timestamp: u64,
-}
-impl SerializedOrder {
-    fn from_scylla_order(&self) -> ReplayOrder {
-        ReplayOrder {
-            id: self.id,
-            timestamp: self.timestamp as u64,
-            user_id: self.user_id as u64,
-            symbol: self.symbol.to_string(),
-            filled_quantity: Decimal::from_str(&self.filled_quantity).unwrap(),
-            price: Decimal::from_str(&self.price).unwrap(),
-            initial_quantity: Decimal::from_str(&self.initial_quantity).unwrap(),
-            order_side: OrderSide::from_str(&self.order_side).unwrap(),
-            order_status: OrderStatus::from_str(&self.order_status).unwrap(),
-            order_type: OrderType::from_str(&self.order_type).unwrap(),
-        }
     }
 }

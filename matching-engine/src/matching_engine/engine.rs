@@ -9,44 +9,14 @@ use strum::IntoEnumIterator;
 use strum_macros::{ EnumIter, FromRepr };
 use crate::matching_engine::Symbol;
 
-use super::orderbook::{ Limit, Order, OrderSide, OrderType, Orderbook, Price, Trade };
+use super::*;
+use super::orderbook::{ Limit, Order, Orderbook };
 use super::error::MatchingEngineErrors;
 use super::{ Asset, Id, OrderId, Quantity, RegisteredSymbols };
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
-pub struct Exchange {
-    pub base: Asset,
-    pub quote: Asset,
-    pub symbol: String,
-}
-#[derive(Debug, Serialize)]
-pub enum SymbolError {
-    InvalidSymbol,
-}
-impl Exchange {
-    pub fn new(base: Asset, quote: Asset) -> Exchange {
-        let base_string = base.to_string();
-        let quote_string = quote.to_string();
-        let symbol = format!("{}_{}", base_string, quote_string);
-        Exchange {
-            base,
-            quote,
-            symbol,
-        }
-    }
-    pub fn from_symbol(symbol: Symbol) -> Result<Exchange, SymbolError> {
-        let symbols: Vec<&str> = symbol.split("_").collect();
-        let base_str = symbols.get(0).ok_or(SymbolError::InvalidSymbol)?;
-        let quote_str = symbols.get(1).ok_or(SymbolError::InvalidSymbol)?;
-        let base = Asset::from_str(&base_str).ok_or(SymbolError::InvalidSymbol)?;
-        let quote = Asset::from_str(&quote_str).ok_or(SymbolError::InvalidSymbol)?;
-        let exchange = Exchange::new(base, quote);
-        Ok(exchange)
-    }
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MatchingEngine {
@@ -190,44 +160,6 @@ impl MatchingEngine {
         Ok(Orderbook::bid_limits(&mut orderbook.bids))
     }
 }
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RecievedOrder {
-    #[serde(skip)]
-    pub id: OrderId,
-    pub user_id: Id,
-    pub symbol: Symbol,
-    pub price: Price,
-    pub initial_quantity: Quantity,
-    pub filled_quantity: Quantity,
-    pub order_type: OrderType,
-    pub order_side: OrderSide,
-    pub order_status: OrderStatus,
-    pub timestamp: u64,
-}
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SaveOrder {
-    pub id: OrderId,
-    pub recieved_order: RecievedOrder,
-}
-#[derive(Debug, Clone, Deserialize, Serialize, EnumIter, EnumStringify)]
-pub enum OrderStatus {
-    InProgress,
-    Filled,
-    PartiallyFilled,
-    Failed,
-}
-impl OrderStatus {
-    pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
-        for asset in OrderStatus::iter() {
-            let current_asset = asset.to_string();
-            if asset_to_match.to_string() == current_asset {
-                return Ok(asset);
-            }
-        }
-        Err(())
-    }
-}
-
 fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>, Connection) {
     let mut engine = MatchingEngine::init();
     let exchange = Exchange::new(Asset::SOL, Asset::USDT);
@@ -243,9 +175,6 @@ fn setup_engine_and_users() -> (MatchingEngine, Exchange, Orderbook, Vec<Id>, Co
 pub mod tests {
     use std::sync::atomic::Ordering;
     use rust_decimal_macros::dec;
-
-    use crate::matching_engine::orderbook::OrderSide;
-
     use super::*;
     #[test]
     fn is_sorting_working() {

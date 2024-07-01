@@ -2,7 +2,8 @@
 
 use std::{ io::Write, sync::{ mpsc::Sender, Arc, Mutex }, time::Instant };
 
-use matching_engine::engine::{ Exchange, MatchingEngine, RecievedOrder, SaveOrder };
+use engine::MatchingEngine;
+use matching_engine::*;
 use redis::Connection;
 use serde_json::from_str;
 use tokio::sync::mpsc::UnboundedSender;
