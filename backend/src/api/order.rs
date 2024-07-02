@@ -108,7 +108,11 @@ impl ScyllaDb {
         let orders: Vec<Order> = orders.map(|order| order.unwrap().from_scylla_order()).collect();
         Ok(orders)
     }
-    pub async fn get_order(&self, order_id: OrderId) -> Result<Order, Box<dyn Error>> {
+    pub async fn get_order(
+        &self,
+        order_id: OrderId,
+        symbol: Symbol
+    ) -> Result<Order, Box<dyn Error>> {
         let s =
             r#"
             SELECT
@@ -123,9 +127,9 @@ impl ScyllaDb {
                 order_status,
                 timestamp
             FROM keyspace_1.order_table
-            WHERE id = ? ;
+            WHERE id = ? AND symbol = ?;
         "#;
-        let res = self.session.query(s, (order_id,)).await?;
+        let res = self.session.query(s, (order_id, symbol)).await?;
         let mut orders = res.rows_typed::<ScyllaOrder>()?;
         let scylla_order = orders
             .next()
@@ -146,7 +150,7 @@ impl ScyllaDb {
                     order_type = ?,
                     order_side = ?,
                     order_status = ?
-                WHERE id = ? ;
+                WHERE id = ? AND symbol = ?;
             "#;
 
         self.session.query(s, (
@@ -157,6 +161,7 @@ impl ScyllaDb {
             order.order_side,
             order.order_status,
             order.id,
+            order.symbol,
         )).await?;
         Ok(())
     }

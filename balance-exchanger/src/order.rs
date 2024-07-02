@@ -7,7 +7,17 @@ use scylla::{
 };
 
 use crate::{
-    Id, Order, OrderId, OrderSide, OrderStatus, OrderType, Price, Quantity, ScyllaDb, ScyllaOrder, Symbol
+    Id,
+    Order,
+    OrderId,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    Price,
+    Quantity,
+    ScyllaDb,
+    ScyllaOrder,
+    Symbol,
 };
 
 impl Order {
@@ -44,7 +54,11 @@ impl ScyllaOrder {
 }
 
 impl ScyllaDb {
-    pub async fn get_order(&self, order_id: OrderId) -> Result<Order, Box<dyn Error>> {
+    pub async fn get_order(
+        &self,
+        order_id: OrderId,
+        symbol: &Symbol
+    ) -> Result<Order, Box<dyn Error>> {
         let s =
             r#"
             SELECT
@@ -59,9 +73,9 @@ impl ScyllaDb {
                 order_status,
                 timestamp
             FROM keyspace_1.order_table
-            WHERE id = ? ;
+            WHERE id = ? AND symbol = ?;
         "#;
-        let res = self.session.query(s, (order_id,)).await?;
+        let res = self.session.query(s, (order_id, symbol)).await?;
         let mut orders = res.rows_typed::<ScyllaOrder>()?;
         let scylla_order = orders
             .next()
@@ -77,7 +91,7 @@ impl ScyllaDb {
             SET
                 filled_quantity = ?, 
                 order_status = ?
-                WHERE id = ?;
+                WHERE id = ? AND symbol = ?;
         "#;
         s
     }

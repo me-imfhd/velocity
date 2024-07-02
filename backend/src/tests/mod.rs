@@ -62,6 +62,7 @@ async fn update_order() {
     let scylla_db = init().await;
     let order_id = 999;
     let user_id = 2;
+    let symbol = "ETH_USDT".to_string();
     let order = Order::new(
         order_id,
         user_id,
@@ -69,16 +70,16 @@ async fn update_order() {
         dec!(1000),
         OrderSide::Ask,
         OrderType::Limit,
-        "SOL_USDT".to_string()
+        symbol.clone()
     );
     let amount = dec!(90);
     scylla_db.new_order(order).await.unwrap();
-    let mut order = scylla_db.get_order(order_id).await.unwrap();
+    let mut order = scylla_db.get_order(order_id, symbol.clone()).await.unwrap();
     order.filled_quantity += amount;
     order.order_status = OrderStatus::PartiallyFilled;
     scylla_db.update_order(&mut order).await.unwrap();
 
-    let updated_order = scylla_db.get_order(order_id).await.unwrap();
+    let updated_order = scylla_db.get_order(order_id, symbol).await.unwrap();
     let users_order = scylla_db.get_users_orders(user_id).await.unwrap();
     println!("{:#?}", users_order);
     assert_eq!(updated_order.order_status.to_string(), OrderStatus::PartiallyFilled.to_string());

@@ -1,8 +1,8 @@
-use std::{ collections::HashMap, error::Error, sync::Arc };
 use scylla::{ batch::Batch, frame::Compression, load_balancing, ExecutionProfile, SessionBuilder };
 use serde_json::from_str;
+use std::{ collections::HashMap, error::Error, sync::Arc };
 
-use crate::{ order, Id, Order, OrderId, Quantity, QueueTrade, ScyllaDb, Trade, User };
+use crate::{ order, Id, Order, OrderId, Quantity, QueueTrade, ScyllaDb, Symbol, Trade, User };
 
 impl ScyllaDb {
     pub async fn create_session(uri: &str) -> Result<ScyllaDb, Box<dyn Error>> {
@@ -17,16 +17,14 @@ impl ScyllaDb {
             .compression(Some(Compression::Lz4))
             .build().await?;
 
-        Ok(ScyllaDb {
-            session,
-        })
+        Ok(ScyllaDb { session })
     }
     pub fn get_order_batch_values(
         &self,
         queue_trade: &QueueTrade,
         mut order_1: Order,
         mut order_2: Order
-    ) -> ((String, String, OrderId), (String, String, OrderId)) {
+    ) -> ((String, String, OrderId, Symbol), (String, String, OrderId, Symbol)) {
         order_1.filled_quantity += queue_trade.base_quantity;
         order_2.filled_quantity += queue_trade.base_quantity;
         order_1.order_status = queue_trade.order_status_1.clone();
@@ -38,11 +36,13 @@ impl ScyllaDb {
                 serialized_order_1.filled_quantity,
                 serialized_order_1.order_status,
                 serialized_order_1.id,
+                serialized_order_1.symbol,
             ),
             (
                 serialized_order_2.filled_quantity,
                 serialized_order_2.order_status,
                 serialized_order_2.id,
+                serialized_order_2.symbol,
             ),
         )
     }
@@ -99,12 +99,15 @@ impl ScyllaDb {
             (serializer_user_2.balance, serializer_user_2.locked_balance, serializer_user_2.id),
         )
     }
-    pub async fn batch_update(
-        &self,
-        queue_trade: QueueTrade
-    ) -> Result<Trade, Box<dyn Error>> {
-        let mut order_1 = self.get_order(queue_trade.order_id_1).await?;
-        let mut order_2 = self.get_order(queue_trade.order_id_2).await?;
+    pub async fn batch_update(&self, queue_trade: QueueTrade) -> Result<Trade, Box<dyn Error>> {
+        let mut order_1 = self.get_order(
+            queue_trade.order_id_1,
+            &queue_trade.exchange.symbol
+        ).await?;
+        let mut order_2 = self.get_order(
+            queue_trade.order_id_2,
+            &queue_trade.exchange.symbol
+        ).await?;
         let mut user_1 = self.get_user(queue_trade.user_id_1 as i64).await?;
         let mut user_2 = self.get_user(queue_trade.user_id_2 as i64).await?;
 
