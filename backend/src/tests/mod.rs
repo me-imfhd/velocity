@@ -12,13 +12,14 @@ async fn init() -> ScyllaDb {
 #[tokio::test]
 async fn is_able_to_create_tables() {
     init().await;
-}
+} 
 #[tokio::test]
 async fn get_trade() {
     let scylla_db = init().await;
-    let trade = Trade::new(1, true, dec!(10.21), dec!(20.1), "SOL_USDT".to_string());
+    let symbol = "SOL_USDT".to_string();
+    let trade = Trade::new(1, true, dec!(10.21), dec!(20.1), symbol.clone());
     scylla_db.new_trade(trade).await.unwrap();
-    let trade = scylla_db.get_trade(1).await.unwrap();
+    let trade = scylla_db.get_trade(1, symbol).await.unwrap();
     assert_eq!(trade.quote_quantity, dec!(10.21) * dec!(20.1));
 }
 #[tokio::test]

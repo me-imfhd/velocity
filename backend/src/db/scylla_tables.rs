@@ -66,13 +66,14 @@ impl ScyllaDb {
         let create_trade_table: &str =
             r#"
         CREATE TABLE IF NOT EXISTS keyspace_1.trade_table (
-            id bigint PRIMARY KEY,
+            id bigint,
             symbol text,
             quantity text,
             quote_quantity text,
             is_market_maker boolean,
             price text,
-            timestamp bigint
+            timestamp bigint,
+            PRIMARY KEY (id, symbol)
         );
       "#;
         self.session.query(create_trade_table, &[]).await?;

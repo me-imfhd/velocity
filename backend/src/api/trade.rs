@@ -92,7 +92,7 @@ impl ScyllaDb {
         let trades: Vec<Trade> = trades.map(|trade| trade.unwrap().from_scylla_trade()).collect();
         Ok(trades)
     }
-    pub async fn get_trade(&self, trade_id: i64) -> Result<Trade, Box<dyn Error>> {
+    pub async fn get_trade(&self, trade_id: i64, symbol: Symbol) -> Result<Trade, Box<dyn Error>> {
         let s =
             r#"
             SELECT
@@ -104,9 +104,9 @@ impl ScyllaDb {
                 price,
                 timestamp
             FROM keyspace_1.trade_table
-            WHERE id = ? ;
+            WHERE id = ? AND symbol = ?;
         "#;
-        let res = self.session.query(s, (trade_id,)).await?;
+        let res = self.session.query(s, (trade_id, symbol)).await?;
         let mut trades = res.rows_typed::<ScyllaTrade>()?;
         let scylla_trade = trades
             .next()
