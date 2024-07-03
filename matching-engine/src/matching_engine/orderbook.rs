@@ -68,6 +68,7 @@ impl Orderbook {
         mut order: Order,
         exchange: &Exchange,
         rc: &mut Connection,
+        users: &mut Users,
         should_exectute_trade: bool
     ) {
         let sorted_orders = match order.order_side {
@@ -83,6 +84,7 @@ impl Orderbook {
                 price,
                 rc,
                 &mut self.trade_id,
+                users,
                 should_exectute_trade
             );
             if order.is_filled() {
@@ -96,6 +98,7 @@ impl Orderbook {
         mut order: Order,
         exchange: &Exchange,
         rc: &mut Connection,
+        users: &mut Users,
         should_exectute_trade: bool
     ) {
         println!("Recived an {} Limit order", order.order_side);
@@ -119,6 +122,7 @@ impl Orderbook {
                         price,
                         rc,
                         &mut self.trade_id,
+                        users,
                         should_exectute_trade
                     );
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
@@ -147,6 +151,7 @@ impl Orderbook {
                         price,
                         rc,
                         &mut self.trade_id,
+                        users,
                         should_exectute_trade
                     );
 
@@ -221,7 +226,12 @@ impl Orderbook {
         let order_id = res.next().transpose().unwrap().unwrap().0;
         self.order_id = order_id as u64;
     }
-    async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
+    async fn replay_orders(
+        &mut self,
+        rc: &mut redis::Connection,
+        session: &Session,
+        users: &mut Users
+    ) {
         let current_time = get_epoch_ms() as i64;
         let since = 1000 * 60 * 60 * 24; // 24 hours in millis
         let from_time = current_time - since;
@@ -243,7 +253,7 @@ impl Orderbook {
     "#;
         let symbol = &self.exchange.symbol;
         let res = session.query(s, (from_time, symbol)).await.unwrap();
-        let mut orders = res.rows_typed::<SerializedOrder>().unwrap();
+        let mut orders = res.rows_typed::<ScyllaOrder>().unwrap();
         let mut replay_orders: Vec<ReplayOrder> = orders
             .map(|order| order.unwrap().from_scylla_order())
             .collect();
@@ -263,6 +273,7 @@ impl Orderbook {
                         order,
                         &Exchange::from_symbol(replay_order.symbol).unwrap(),
                         rc,
+                        users,
                         false
                     );
                 }
@@ -280,16 +291,22 @@ impl Orderbook {
                         order,
                         &Exchange::from_symbol(replay_order.symbol).unwrap(),
                         rc,
+                        users,
                         false
                     );
                 }
             }
         }
     }
-    pub async fn recover_orderbook(&mut self, session: &Session, rc: &mut redis::Connection) {
+    pub async fn recover_orderbook(
+        &mut self,
+        session: &Session,
+        rc: &mut redis::Connection,
+        users: &mut Users
+    ) {
         self.recover_trade_id(&session).await;
         self.recover_order_id(&session).await;
-        self.replay_orders(rc, &session).await;
+        self.replay_orders(rc, &session, users).await;
     }
     pub fn add_limit_order(&mut self, price: Price, order: Order) {
         let order_side = &order.order_side.clone();
@@ -384,6 +401,7 @@ impl Limit {
         exchange_price: Price,
         rc: &mut Connection,
         mut trade_id: &mut u64,
+        users: &mut Users,
         should_exectute_trade: bool
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
@@ -401,60 +419,53 @@ impl Limit {
                     if should_exectute_trade == true {
                         *trade_id += 1;
                         let timestamp = get_epoch_micro();
-                        let trade = match order.order_side {
-                            OrderSide::Bid =>
-                                QueueTrade {
-                                    trade_id: *trade_id,
-                                    user_id_1: limit_order.user_id,
-                                    user_id_2: order.user_id,
-                                    exchange: exchange.clone(),
-                                    base_quantity: remaining_quantity,
-                                    price: exchange_price,
-                                    is_market_maker: order.is_market_maker,
-                                    order_status_1: OrderStatus::Filled,
-                                    order_status_2: OrderStatus::PartiallyFilled,
-                                    order_id_1: order.id,
-                                    order_id_2: limit_order.id,
-                                    timestamp,
-                                },
-
-                            OrderSide::Ask =>
-                                QueueTrade {
-                                    trade_id: *trade_id,
-                                    user_id_1: order.user_id,
-                                    user_id_2: limit_order.user_id,
-                                    exchange: exchange.clone(),
-                                    base_quantity: remaining_quantity,
-                                    price: exchange_price,
-                                    is_market_maker: order.is_market_maker,
-                                    order_status_1: OrderStatus::Filled,
-                                    order_status_2: OrderStatus::PartiallyFilled,
-                                    order_id_1: order.id,
-                                    order_id_2: limit_order.id,
-                                    timestamp,
-                                },
+                        let user_ids = match order.order_side {
+                            OrderSide::Bid => (limit_order.user_id, order.user_id),
+                            OrderSide::Ask => (order.user_id, limit_order.user_id),
                         };
+                        let post_users = exchange_balance(
+                            users,
+                            &exchange,
+                            remaining_quantity,
+                            exchange_price,
+                            user_ids.0,
+                            user_ids.1
+                        );
+                        let trade = Filler {
+                            trade_id: *trade_id,
+                            post_users,
+                            exchange: exchange.clone(),
+                            quantity: remaining_quantity,
+                            exchange_price,
+                            is_market_maker: order.is_market_maker,
+                            order_status: OrderStatus::Filled,
+                            client_order_status: OrderStatus::PartiallyFilled,
+                            order_id: order.id,
+                            client_order_id: limit_order.id,
+                            timestamp,
+                        };
+
                         let order_update_1 = OrderUpdate {
-                            order_id: trade.order_id_1,
-                            client_order_id: trade.order_id_2,
-                            executed_quantity: trade.base_quantity,
-                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_id: trade.order_id,
+                            client_order_id: trade.client_order_id,
+                            executed_quantity: trade.quantity,
+                            executed_quote_quantity: trade.exchange_price * trade.quantity,
                             order_side: order.order_side.clone(),
-                            order_status: trade.order_status_1.clone(),
-                            price: trade.price,
+                            order_status: trade.order_status.clone(),
+                            price: trade.exchange_price,
                             symbol: trade.exchange.symbol.clone(),
                             trade_id: trade.trade_id,
                             trade_timestamp: timestamp,
                             user_id: order.user_id,
                         };
                         let order_update_2 = OrderUpdate {
-                            order_id: trade.order_id_2,
-                            client_order_id: trade.order_id_1,
-                            executed_quantity: trade.base_quantity,
-                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_id: trade.order_id,
+                            client_order_id: trade.client_order_id,
+                            executed_quantity: trade.quantity,
+                            executed_quote_quantity: trade.exchange_price * trade.quantity,
                             order_side: limit_order.order_side.clone(),
-                            order_status: trade.order_status_1.clone(),
-                            price: trade.price,
+                            order_status: trade.order_status.clone(),
+                            price: trade.exchange_price,
                             symbol: trade.exchange.symbol.clone(),
                             trade_id: trade.trade_id,
                             trade_timestamp: timestamp,
@@ -463,15 +474,16 @@ impl Limit {
                         let publish_trade = Trade {
                             id: trade.trade_id,
                             is_market_maker: trade.is_market_maker,
-                            price: trade.price,
-                            quantity: trade.base_quantity,
-                            quote_quantity: trade.price * trade.base_quantity,
-                            timestamp: timestamp,
+                            price: trade.exchange_price,
+                            quantity: trade.quantity,
+                            quote_quantity: trade.exchange_price * trade.quantity,
+                            timestamp,
                         };
-                        let serialized_trade = to_string(&trade).unwrap();
+                        let serialized_filler = to_string(&trade).unwrap();
                         let serialized_order_update_1 = to_string(&order_update_1).unwrap();
                         let serialized_order_update_2 = to_string(&order_update_2).unwrap();
                         let serialized_publish_trade = to_string(&publish_trade).unwrap();
+
                         redis
                             ::cmd("PUBLISH")
                             .arg(format!("order_update:{}", trade.exchange.symbol))
@@ -487,78 +499,67 @@ impl Limit {
                             .arg(format!("trades:{}", trade.exchange.symbol))
                             .arg(serialized_publish_trade)
                             .query::<Value>(rc);
-                        redis
-                            ::cmd("LPUSH")
-                            .arg("queues:trade")
-                            .arg(serialized_trade)
-                            .query::<Value>(rc);
+                        redis::cmd("LPUSH").arg("filler").arg(serialized_filler).query::<Value>(rc);
                     }
                 }
                 false => {
                     println!("\tAn order was matched");
+                    let order_status = match limit_order.quantity == remaining_quantity {
+                        true => OrderStatus::Filled,
+                        false => OrderStatus::PartiallyFilled,
+                    };
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
                     if should_exectute_trade == true {
                         *trade_id += 1;
-                        let limit_order_status = match limit_order.quantity == remaining_quantity {
-                            true => OrderStatus::Filled,
-                            false => OrderStatus::PartiallyFilled,
-                        };
-                        let timestamp = get_epoch_micro();
-                        let trade = match order.order_side {
-                            OrderSide::Bid =>
-                                QueueTrade {
-                                    trade_id: *trade_id,
-                                    user_id_1: limit_order.user_id,
-                                    user_id_2: order.user_id,
-                                    exchange: exchange.clone(),
-                                    base_quantity: limit_order.quantity,
-                                    price: exchange_price,
-                                    is_market_maker: order.is_market_maker,
-                                    order_status_1: OrderStatus::Filled,
-                                    order_status_2: limit_order_status,
-                                    order_id_1: order.id,
-                                    order_id_2: limit_order.id,
-                                    timestamp,
-                                },
 
-                            OrderSide::Ask =>
-                                QueueTrade {
-                                    trade_id: *trade_id,
-                                    user_id_1: order.user_id,
-                                    user_id_2: limit_order.user_id,
-                                    exchange: exchange.clone(),
-                                    base_quantity: limit_order.quantity,
-                                    price: exchange_price,
-                                    is_market_maker: order.is_market_maker,
-                                    order_status_1: OrderStatus::Filled,
-                                    order_status_2: limit_order_status,
-                                    order_id_1: order.id,
-                                    order_id_2: limit_order.id,
-                                    timestamp,
-                                },
+                        let timestamp = get_epoch_micro();
+                        let user_ids = match order.order_side {
+                            OrderSide::Bid => (limit_order.user_id, order.user_id),
+                            OrderSide::Ask => (order.user_id, limit_order.user_id),
+                        };
+                        let post_users = exchange_balance(
+                            users,
+                            &exchange,
+                            limit_order.quantity,
+                            exchange_price,
+                            user_ids.0,
+                            user_ids.1
+                        );
+                        let trade = Filler {
+                            trade_id: *trade_id,
+                            post_users,
+                            exchange: exchange.clone(),
+                            quantity: limit_order.quantity,
+                            exchange_price,
+                            is_market_maker: order.is_market_maker,
+                            order_status,
+                            client_order_status: OrderStatus::Filled,
+                            order_id: order.id,
+                            client_order_id: limit_order.id,
+                            timestamp,
                         };
                         let order_update_1 = OrderUpdate {
-                            order_id: trade.order_id_1,
-                            client_order_id: trade.order_id_2,
-                            executed_quantity: trade.base_quantity,
-                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_id: trade.order_id,
+                            client_order_id: trade.client_order_id,
+                            executed_quantity: trade.quantity,
+                            executed_quote_quantity: trade.exchange_price * trade.quantity,
                             order_side: order.order_side.clone(),
-                            order_status: trade.order_status_1.clone(),
-                            price: trade.price,
+                            order_status: trade.order_status.clone(),
+                            price: trade.exchange_price,
                             symbol: trade.exchange.symbol.clone(),
                             trade_id: trade.trade_id,
                             trade_timestamp: timestamp,
                             user_id: order.user_id,
                         };
                         let order_update_2 = OrderUpdate {
-                            order_id: trade.order_id_2,
-                            client_order_id: trade.order_id_1,
-                            executed_quantity: trade.base_quantity,
-                            executed_quote_quantity: trade.price * trade.base_quantity,
+                            order_id: trade.client_order_id,
+                            client_order_id: trade.order_id,
+                            executed_quantity: trade.quantity,
+                            executed_quote_quantity: trade.exchange_price * trade.quantity,
                             order_side: limit_order.order_side.clone(),
-                            order_status: trade.order_status_1.clone(),
-                            price: trade.price,
+                            order_status: trade.order_status.clone(),
+                            price: trade.exchange_price,
                             symbol: trade.exchange.symbol.clone(),
                             trade_id: trade.trade_id,
                             trade_timestamp: timestamp,
@@ -567,12 +568,12 @@ impl Limit {
                         let publish_trade = Trade {
                             id: trade.trade_id,
                             is_market_maker: trade.is_market_maker,
-                            price: trade.price,
-                            quantity: trade.base_quantity,
-                            quote_quantity: trade.price * trade.base_quantity,
+                            price: trade.exchange_price,
+                            quantity: trade.quantity,
+                            quote_quantity: trade.exchange_price * trade.quantity,
                             timestamp: timestamp,
                         };
-                        let serialized_trade = to_string(&trade).unwrap();
+                        let serialized_filler = to_string(&trade).unwrap();
                         let serialized_order_update_1 = to_string(&order_update_1).unwrap();
                         let serialized_order_update_2 = to_string(&order_update_2).unwrap();
                         let serialized_publish_trade = to_string(&publish_trade).unwrap();
@@ -591,11 +592,7 @@ impl Limit {
                             .arg(format!("trades:{}", trade.exchange.symbol))
                             .arg(serialized_publish_trade)
                             .query::<Value>(rc);
-                        redis
-                            ::cmd("LPUSH")
-                            .arg("queues:trade")
-                            .arg(serialized_trade)
-                            .query::<Value>(rc);
+                        redis::cmd("LPUSH").arg("filler").arg(serialized_filler).query::<Value>(rc);
                     }
 
                     self.orders.remove(i);
@@ -615,5 +612,28 @@ impl Limit {
             .map(|order| order.quantity)
             .reduce(|a, b| a + b)
             .unwrap_or(dec!(0))
+    }
+}
+pub fn exchange_balance(
+    users: &mut Users,
+    exchange: &Exchange,
+    quantity: Quantity,
+    exchange_price: Price,
+    user_id: Id,
+    client_user_id: Id
+) -> PostUsers {
+    users.unlock_amount(&exchange.base, user_id, quantity);
+    users.withdraw(&exchange.base, quantity, user_id);
+    users.deposit(&exchange.base, quantity, client_user_id);
+
+    users.unlock_amount(&exchange.quote, client_user_id, quantity * exchange_price);
+    users.withdraw(&exchange.quote, quantity * exchange_price, client_user_id);
+    users.deposit(&exchange.quote, quantity * exchange_price, user_id);
+
+    let user = users.users.get(&user_id).unwrap().clone();
+    let client = users.users.get(&client_user_id).unwrap().clone();
+    PostUsers {
+        client,
+        user,
     }
 }

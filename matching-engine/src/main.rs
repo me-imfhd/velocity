@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Instant;
+use actix_web::web;
 use matching_engine::app::Application;
 use matching_engine::config::get_config;
 use matching_engine::connect_redis;
@@ -35,7 +36,7 @@ fn main() {
     let mut matching_engine = MatchingEngine::init();
     // Block and recover orderbooks on restart
     TOKIO_RUNTIME.block_on(matching_engine.recover_all_orderbooks(&session, &mut redis_connection));
-    let app_state = Arc::new(AppState {
+    let app_state = web::Data::new(AppState {
         matching_engine: Mutex::new(matching_engine),
     });
     // Running registered orderbooks engines parallely
@@ -44,13 +45,30 @@ fn main() {
         thread::spawn(process_order(symbol.to_string(), app_state, tx.clone()));
     });
     // Saving orders via channels parallely
-    loop {
-        if let Ok(order) = rx.try_recv() {
-            let start = Instant::now();
-            TOKIO_RUNTIME.block_on(new_order(&session_clone, order.id, order.recieved_order,));
-            println!("\tSaved order in {} ms\n", start.elapsed().as_millis());
-        } else {
-            // println!("rx empty");
+    thread::spawn(move || {
+        loop {
+            if let Ok(order) = rx.try_recv() {
+                let start = Instant::now();
+                TOKIO_RUNTIME.block_on(
+                    new_order(
+                        &session_clone,
+                        order.id,
+                        order.recieved_order,
+                        order.locked_balance,
+                        order.asset
+                    )
+                );
+                println!("\tSaved order in {} ms\n", start.elapsed().as_millis());
+            } else {
+                // println!("rx empty");
+            }
         }
-    }
+    });
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async move {
+        dotenv::dotenv().ok();
+        let config = get_config().expect("Failed to read config");
+        let application = Application::build(config, app_state).await.unwrap();
+        application.run_until_stopped().await.unwrap();
+    })
 }

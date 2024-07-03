@@ -1,14 +1,27 @@
 #![allow(non_camel_case_types)]
-use std::{ cell::Cell, str::FromStr, sync::atomic::{ AtomicU64, Ordering } };
+use std::{ cell::Cell, collections::HashMap, str::FromStr, sync::atomic::{ AtomicU64, Ordering } };
 use enum_stringify::EnumStringify;
 use rust_decimal::Decimal;
-use scylla::{ transport::errors::QueryError, FromRow, SerializeRow, Session };
+use scylla::{ batch::Batch, transport::errors::QueryError, FromRow, SerializeRow, Session };
 use serde::{ Deserialize, Serialize };
 use strum::IntoEnumIterator;
 use strum_macros::{ EnumIter, EnumString };
 pub mod orderbook;
 pub mod engine;
 pub mod error;
+pub mod user;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct User {
+    pub id: Id,
+    pub balance: HashMap<Asset, Quantity>,
+    pub locked_balance: HashMap<Asset, Quantity>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Users {
+    pub users: HashMap<Id, User>,
+}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, EnumIter, Serialize, Deserialize, EnumStringify)]
 pub enum Asset {
@@ -31,7 +44,8 @@ impl Asset {
 pub type Price = Decimal;
 pub type Symbol = String;
 pub type Id = u64;
-pub type OrderId = i64;
+pub type OrderId = u64;
+pub type TradeId = u64;
 pub type Quantity = Decimal;
 
 #[derive(Debug, Clone, Serialize, Deserialize, EnumIter, EnumStringify)]
@@ -61,9 +75,15 @@ pub enum RegisteredSymbols {
     BTC_USDT,
     ETH_USDT,
 }
+#[derive(Debug, Clone, Deserialize, Serialize, SerializeRow, FromRow)]
+pub struct ScyllaUser {
+    pub id: i64,
+    pub balance: HashMap<String, String>,
+    pub locked_balance: HashMap<String, String>,
+}
 #[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
 pub struct ScyllaOrder {
-    pub id: OrderId,
+    pub id: i64,
     pub user_id: i64,
     pub symbol: String,
     pub price: String,
@@ -92,6 +112,8 @@ pub struct RecievedOrder {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SaveOrder {
     pub id: OrderId,
+    pub locked_balance: Quantity,
+    pub asset: Asset,
     pub recieved_order: RecievedOrder,
 }
 #[derive(Debug, Clone, Deserialize, Serialize, EnumIter, EnumStringify)]
@@ -116,7 +138,7 @@ impl OrderStatus {
 impl RecievedOrder {
     fn to_scylla_order(&self, order_id: OrderId) -> ScyllaOrder {
         ScyllaOrder {
-            id: order_id,
+            id: order_id as i64,
             timestamp: self.timestamp as i64,
             user_id: self.user_id as i64,
             symbol: self.symbol.to_string(),
@@ -132,9 +154,11 @@ impl RecievedOrder {
 pub async fn new_order(
     session: &Session,
     order_id: OrderId,
-    order: RecievedOrder
+    order: RecievedOrder,
+    locked_balance: Quantity,
+    lock_asset: Asset
 ) -> Result<(), QueryError> {
-    let s =
+    let new_order =
         r#"
         INSERT INTO keyspace_1.order_table (
             id,
@@ -149,14 +173,26 @@ pub async fn new_order(
             timestamp
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     "#;
-    let order = order.to_scylla_order(order_id);
-    session.query(s, order).await?;
+    let lock_balance =
+        r#"
+        UPDATE keyspace_1.user_table 
+        SET
+            locked_balance[?] = ?
+        WHERE id = ?;
+    "#;
+    let mut batch: Batch = Default::default();
+    batch.append_statement(new_order);
+    batch.append_statement(lock_balance);
+    let prepared_batch: Batch = session.prepare_batch(&batch).await?;
+    let order_value = order.to_scylla_order(order_id);
+    let user_value = (lock_asset.to_string(), locked_balance.to_string(), order.user_id as i64);
+    session.batch(&prepared_batch, (order_value, user_value)).await.unwrap();
     Ok(())
 }
-impl SerializedOrder {
+impl ScyllaOrder {
     fn from_scylla_order(&self) -> ReplayOrder {
         ReplayOrder {
-            id: self.id,
+            id: self.id as u64,
             timestamp: self.timestamp as u64,
             user_id: self.user_id as u64,
             symbol: self.symbol.to_string(),
@@ -171,19 +207,23 @@ impl SerializedOrder {
 }
 
 #[derive(Debug, Serialize)]
-pub struct QueueTrade {
+pub struct Filler {
     trade_id: Id,
-    user_id_1: Id,
-    user_id_2: Id,
     exchange: Exchange,
-    base_quantity: Quantity,
-    price: Price,
+    quantity: Quantity,
+    exchange_price: Price,
     is_market_maker: bool,
-    order_status_1: OrderStatus,
-    order_status_2: OrderStatus,
-    order_id_1: OrderId,
-    order_id_2: OrderId,
+    post_users: PostUsers,
+    order_status: OrderStatus,
+    client_order_status: OrderStatus,
+    order_id: OrderId,
+    client_order_id: OrderId,
     timestamp: u128,
+}
+#[derive(Debug, Serialize)]
+pub struct PostUsers {
+    pub user: User,
+    pub client: User,
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub struct Exchange {
@@ -216,20 +256,6 @@ impl Exchange {
         Ok(exchange)
     }
 }
-
-#[derive(Debug, Deserialize, Serialize, SerializeRow, FromRow)]
-pub struct SerializedOrder {
-    pub id: OrderId,
-    pub user_id: i64,
-    pub symbol: String,
-    pub price: String,
-    pub initial_quantity: String,
-    pub filled_quantity: String,
-    pub order_type: String,
-    pub order_side: String,
-    pub order_status: String,
-    pub timestamp: i64,
-}
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ReplayOrder {
     pub id: OrderId,
@@ -246,8 +272,8 @@ pub struct ReplayOrder {
 
 #[derive(Serialize, Deserialize)]
 pub struct OrderUpdate {
-    order_id: i64,
-    client_order_id: i64,
+    order_id: u64,
+    client_order_id: u64,
     trade_id: u64,
     user_id: u64,
     trade_timestamp: u128,

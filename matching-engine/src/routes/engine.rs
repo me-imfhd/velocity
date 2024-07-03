@@ -6,11 +6,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ Deserialize, Serialize };
 
-use crate::{
-    matching_engine::{
-        Asset, Exchange, Id, OrderSide, Quantity, Symbol
-    }, AppState,
-};
+use crate::{ matching_engine::{ Asset, Exchange, Id, OrderSide, Quantity, Symbol }, AppState };
 #[derive(Deserialize)]
 struct SymbolStruct {
     symbol: Symbol,
@@ -46,10 +42,7 @@ pub async fn get_asks(
     match exchange_res {
         Ok(exchange) => {
             let asks = matching_engine.get_asks(&exchange);
-            if let Ok(asks) = asks {
-                return actix_web::HttpResponse::Ok().json(asks);
-            }
-            actix_web::HttpResponse::Conflict().json(asks.err())
+            return actix_web::HttpResponse::Ok().json(asks);
         }
         Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
     }
@@ -64,10 +57,7 @@ pub async fn get_bids(
     match exchange_res {
         Ok(exchange) => {
             let bids = matching_engine.get_bids(&exchange);
-            if let Ok(bids) = bids {
-                return actix_web::HttpResponse::Ok().json(bids);
-            }
-            actix_web::HttpResponse::Conflict().json(bids.err())
+            return actix_web::HttpResponse::Ok().json(bids);
         }
         Err(_) => actix_web::HttpResponse::NotFound().json("Invalid Symbol"),
     }

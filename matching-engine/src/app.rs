@@ -16,7 +16,11 @@ use serde_json::from_str;
 
 use crate::{
     config::GlobalConfig,
-    routes::{ engine::{ get_asks, get_bids, get_quote }, health::ping },
+    routes::{
+        engine::{ get_asks, get_bids, get_quote },
+        health::ping,
+        user::{ deposit, new_user, user_balance, withdraw },
+    },
     AppState,
 };
 
@@ -53,6 +57,13 @@ async fn run(
         App::new().service(
             scope("/api/v1")
                 .app_data(app_state.clone())
+                .service(
+                    scope("/user")
+                        .service(new_user)
+                        .service(user_balance)
+                        .service(deposit)
+                        .service(withdraw)
+                )
                 .service(ping)
                 .service(get_asks)
                 .service(get_bids)

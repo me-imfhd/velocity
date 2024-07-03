@@ -2,6 +2,7 @@
 
 use std::{ io::Write, sync::{ mpsc::Sender, Arc, Mutex }, time::Instant };
 
+use actix_web::web;
 use engine::MatchingEngine;
 use matching_engine::*;
 use redis::Connection;
@@ -23,7 +24,7 @@ pub fn connect_redis(url: &str) -> Connection {
 
 pub fn process_order(
     symbol: String,
-    app_state: Arc<AppState>,
+    app_state: web::Data<AppState>,
     tx: UnboundedSender<SaveOrder>
 ) -> impl Fn() {
     move || {
@@ -39,25 +40,37 @@ pub fn process_order(
                 Ok(order_string) => {
                     if let Ok(recieved_order) = from_str::<RecievedOrder>(&order_string) {
                         let mut matching_engine = app_state.matching_engine.lock().unwrap();
-                        // right now two orders of different orderbooks might be running sequentially instead of parallely-
-                        // since the entire matching engine gets locked for processing single order.
-                        // (maybe my guess), we don't need mutex here because each thread mutates only one orderbook
-                        // so there is no scope for race conditions here
                         let exchange = Exchange::from_symbol(
                             recieved_order.symbol.clone()
                         ).unwrap();
-                        let order_id = matching_engine.increment_order_id(&exchange);
-                        tx.send(SaveOrder {
-                            id: order_id,
-                            recieved_order: recieved_order.clone(),
-                        });
-                        matching_engine.process_order(
-                            recieved_order,
-                            order_id,
+                        let result = matching_engine.users.validate_and_lock_balance(
+                            recieved_order.order_side.clone(),
                             &exchange,
-                            &mut con
+                            recieved_order.user_id,
+                            recieved_order.price,
+                            recieved_order.initial_quantity
                         );
-                        println!("Processed order in {} ms", start.elapsed().as_millis());
+                        match result {
+                            Ok((asset, locked_balance)) => {
+                                let order_id = matching_engine.increment_order_id(&exchange);
+                                tx.send(SaveOrder {
+                                    id: order_id,
+                                    locked_balance,
+                                    asset,
+                                    recieved_order: recieved_order.clone(),
+                                });
+                                matching_engine.process_order(
+                                    recieved_order,
+                                    order_id,
+                                    &exchange,
+                                    &mut con
+                                );
+                                println!("Processed order in {} ms", start.elapsed().as_millis());
+                            }
+                            Err(err) => {
+                                println!("{:?}", err);
+                            }
+                        }
                     }
                 }
                 Err(_) => {
