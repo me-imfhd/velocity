@@ -64,20 +64,7 @@ pub type Id = u64;
 pub type OrderId = i64;
 pub type Quantity = Decimal;
 pub type Price = Decimal;
-#[derive(Deserialize)]
-pub struct QueueTrade {
-    pub trade_id: Id,
-    pub user_id_1: Id,
-    pub user_id_2: Id,
-    pub exchange: Exchange,
-    pub base_quantity: Quantity,
-    pub price: Price,
-    pub is_market_maker: bool,
-    pub order_status_1: OrderStatus,
-    pub order_status_2: OrderStatus,
-    pub order_id_1: Id,
-    pub order_id_2: Id,
-}
+
 #[derive(Debug, Clone, Deserialize, EnumIter, EnumStringify)]
 pub enum OrderStatus {
     InProgress,
