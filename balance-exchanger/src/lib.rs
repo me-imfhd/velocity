@@ -75,22 +75,25 @@ pub struct User {
     pub balance: HashMap<Asset, Quantity>,
     pub locked_balance: HashMap<Asset, Quantity>,
 }
-#[derive(Debug, Serialize, Deserialize)]
-pub struct QueueTrade {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Filler {
     trade_id: Id,
-    user_id_1: Id,
-    user_id_2: Id,
     exchange: Exchange,
-    base_quantity: Quantity,
-    price: Price,
+    quantity: Quantity,
+    exchange_price: Price,
     is_market_maker: bool,
-    order_status_1: OrderStatus,
-    order_status_2: OrderStatus,
-    order_id_1: OrderId,
-    order_id_2: OrderId,
-    timestamp: u128
+    post_users: PostUsers,
+    order_status: OrderStatus,
+    client_order_status: OrderStatus,
+    order_id: OrderId,
+    client_order_id: OrderId,
+    timestamp: u128,
 }
-
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PostUsers {
+    pub user: User,
+    pub client: User,
+}
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Order {
     pub id: OrderId,

@@ -1,6 +1,6 @@
-use std::time::{Duration, Instant};
+use std::time::{ Duration, Instant };
 
-use balance_exchanger::{ QueueTrade, ScyllaDb };
+use balance_exchanger::{ Filler, ScyllaDb };
 use redis::{ Connection, Value };
 use serde_json::from_str;
 
@@ -12,23 +12,26 @@ async fn main() {
     let scylla_db = ScyllaDb::create_session(uri).await.unwrap();
     loop {
         let con = &mut con;
-        let result = redis::cmd("RPOP").arg("queues:trade").query::<String>(con);
+        let result = redis::cmd("RPOP").arg("filler").query::<String>(con);
         match result {
             Ok(queue_trade_string) => {
-                let queue_trade: QueueTrade = from_str(&queue_trade_string).unwrap();
-                tokio::time::sleep(Duration::from_millis(10)).await; // wait for order to be saved, to avoid unnecessary refilling the queue
+                let queue_trade: Filler = from_str(&queue_trade_string).unwrap();
                 let start = Instant::now();
                 let result = scylla_db.batch_update(queue_trade).await;
                 match result {
                     Ok(trade) => {
-                        println!("Balance Exchanged, Orders Updated, Trade Id : {} in {} ms", trade.id, start.elapsed().as_millis());
+                        println!(
+                            "Balance Exchanged, Orders Updated, Trade Id : {} in {} ms",
+                            trade.id,
+                            start.elapsed().as_millis()
+                        );
                     }
                     Err(err) => {
                         eprintln!("{}", err);
-                        // retry
+                        tokio::time::sleep(Duration::from_millis(30)).await; // wait for order to be saved, to avoid unnecessary refilling the queue
                         redis
-                            ::cmd("RPUSH") 
-                            .arg("queues:trade")
+                            ::cmd("RPUSH")
+                            .arg("filler")
                             .arg(queue_trade_string)
                             .query::<Value>(con)
                             .unwrap();
