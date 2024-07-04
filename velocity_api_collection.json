@@ -1,0 +1,114 @@
+{
+    "clientName": "Thunder Client",
+    "collectionName": "Velocity Api Collection",
+    "collectionId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+    "dateExported": "2024-07-04T14:54:05.862Z",
+    "version": "1.2",
+    "folders": [],
+    "requests": [
+        {
+            "_id": "fab36501-d89f-4cee-90fd-0e1eda6ce324",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "New User",
+            "url": "http://127.0.0.1:8080/api/v1/user/new",
+            "method": "POST",
+            "sortNum": 10000,
+            "created": "2024-07-04T14:50:22.960Z",
+            "modified": "2024-07-04T14:50:22.960Z",
+            "headers": []
+        },
+        {
+            "_id": "ee4927fd-ca9d-4d08-8ef8-bc5ea7321c96",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Execute Order",
+            "url": "http://127.0.0.1:8080/api/v1/order",
+            "method": "POST",
+            "sortNum": 20000,
+            "created": "2024-07-04T14:51:19.786Z",
+            "modified": "2024-07-04T14:51:19.786Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 2,\n  \"base\": \"SOL\",\n  \"quote\": \"USDT\",\n  \"price\": 100,\n  \"quantity\": 10,\n  \"order_side\": \"Bid\",\n  \"order_type\": \"Limit\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "6b18aae6-4bd9-4f1f-b607-2e015704e030",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Deposit Balance",
+            "url": "http://127.0.0.1:8080/api/v1/user/deposit",
+            "method": "POST",
+            "sortNum": 30000,
+            "created": "2024-07-04T14:52:01.009Z",
+            "modified": "2024-07-04T14:52:01.009Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"asset\": \"SOL\",\n  \"quantity\": 1000\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "ad355744-e416-41cb-bd04-f41daeffb24c",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Get Users Orders",
+            "url": "http://127.0.0.1:8080/api/v1/user/orders?user_id=1",
+            "method": "GET",
+            "sortNum": 40000,
+            "created": "2024-07-04T14:52:40.415Z",
+            "modified": "2024-07-04T14:52:40.415Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "user_id",
+                    "value": "1",
+                    "isPath": false
+                }
+            ]
+        },
+        {
+            "_id": "f70b4b47-0ac6-40e3-b014-25589e35b9ba",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Get User",
+            "url": "http://127.0.0.1:8080/api/v1/user?id=1",
+            "method": "GET",
+            "sortNum": 50000,
+            "created": "2024-07-04T14:53:03.148Z",
+            "modified": "2024-07-04T14:53:03.148Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "id",
+                    "value": "1",
+                    "isPath": false
+                }
+            ]
+        },
+        {
+            "_id": "2974af8b-a901-421a-b7ef-2f7f9a3f15c0",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Trade History",
+            "url": "http://127.0.0.1:8080/api/v1/trades?symbol=SOL_USDT",
+            "method": "GET",
+            "sortNum": 60000,
+            "created": "2024-07-04T14:53:39.551Z",
+            "modified": "2024-07-04T14:53:39.551Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "symbol",
+                    "value": "SOL_USDT",
+                    "isPath": false
+                }
+            ]
+        }
+    ],
+    "ref": "113FUEu7rbz6RPaSY7RS0l5aIT6u0EysOXC9U7Ish8-Oc_yIEWXt1pjoEhlmm5V1VySLXz0qkvSCsiq9RiqbAQ"
+}
