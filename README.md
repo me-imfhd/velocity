@@ -1,9 +1,10 @@
 ## Key Features
 ## Performance Benchmarks
-- **Order Placement:** < 1 ms
-- **Processing & Publishing Trades:** 0-5 ms
-- **Order Saving and Balance Locking:** 5-10 ms per order via channels and processing parallely
-- **Database Updates:** 14-28 ms per trade (updating orders, updating balances, and inserting trades)
+- **Order Placement:** 0ms
+- **Processing Order, Returning Response & Publishing Events:** ~4ms (1-10ms)
+- **Complete Order** ~5ms
+- **Order Saving and Balance Locking Parallely:** ~10ms (5-40ms)
+- **Database Updates:** ~25ms per trade (updating orders, updating balances, and inserting trades)
 ## Architecture
 ### Database
 - **Scylla DB:** Velocity uses Scylla DB for low-latency database interactions, recovering orderbooks ensuring things never go wrong.
