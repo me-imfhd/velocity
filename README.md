@@ -24,9 +24,13 @@
 <center><img src="./architecture.png"></center>
 
 ## Videos
-- **Architecture** 
+- **Architecture**
+  
+https://github.com/me-imfhd/velocity/assets/114667178/d97cca7f-2399-4c3a-8463-cfb9ce5baafc
 
-- **Performance Benchmarks** 
+- **Performance Benchmarks**
+  
+https://github.com/me-imfhd/velocity/assets/114667178/976cf18e-29c4-47c6-aee2-12e6ac512e58
 
 ## Remaining:
 - Authentication
