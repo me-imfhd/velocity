@@ -1,8 +1,8 @@
 ## Key Features
 ## Performance Benchmarks
 - **Order Placement:** 0ms
-- **Processing Order, Returning Response & Publishing Events:** ~4ms (1-10ms)
-- **Complete Order** ~5ms
+- **Processing Order & Publishing Events:** ~4ms (1-10ms)
+- **Recieving Order Response** ~6ms
 - **Order Saving and Balance Locking Parallely:** ~10ms (5-40ms)
 - **Database Updates:** ~25ms per trade (updating orders, updating balances, and inserting trades)
 ## Architecture
@@ -24,14 +24,11 @@
 <center><img src="./architecture.png"></center>
 
 ## Videos
-- **Architecture** - 
-https://www.loom.com/share/e5d181ee09e64750be297f1b3df79c15?sid=cc7a3a22-20ae-4dbd-8796-4b86c86c0da6
-- **Walkthrough 1** - (outdated)
-https://www.loom.com/share/cff6e96a8b654a0caba99f51f4d2e3ba?sid=5e49bbee-1af6-4d81-98f4-ffedb1359f64
-- **Walkthrough 2** - (outdated)
-https://www.loom.com/share/0b4f30f216b3419386184e48522396e7?sid=ac807ad0-4533-4f51-a5af-99a51bce4645
+- **Architecture** 
 
-## Todo:
+- **Performance Benchmarks** 
+
+## Remaining:
 - Authentication
 - Trading View
 - Frontend Integration
