@@ -17,6 +17,7 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MatchingEngine {
@@ -73,7 +74,7 @@ impl MatchingEngine {
         order_id: OrderId,
         exchange: &Exchange,
         rc: &mut Connection
-    ) {
+    ) -> (Decimal, Decimal, OrderStatus) {
         match recieved_order.order_type {
             OrderType::Market => {
                 let order = Order::new(
@@ -84,7 +85,7 @@ impl MatchingEngine {
                     false,
                     recieved_order.user_id
                 );
-                self.fill_market_order(order, &exchange, rc);
+                self.fill_market_order(order, &exchange, rc)
             }
             OrderType::Limit => {
                 let order = Order::new(
@@ -95,7 +96,7 @@ impl MatchingEngine {
                     true,
                     recieved_order.user_id
                 );
-                self.fill_limit_order(recieved_order.price, order, &exchange, rc);
+                self.fill_limit_order(recieved_order.price, order, &exchange, rc)
             }
         }
     }
@@ -125,10 +126,10 @@ impl MatchingEngine {
         mut order: Order,
         exchange: &Exchange,
         rc: &mut Connection
-    ) {
+    ) -> (Decimal, Decimal, OrderStatus) {
         let mut orderbook = self.orderbooks.get_mut(&exchange).unwrap();
         let users = &mut self.users;
-        orderbook.fill_market_order(order, exchange, rc, users, true);
+        orderbook.fill_market_order(order, exchange, rc, users, true)
     }
     pub fn fill_limit_order(
         &mut self,
@@ -136,10 +137,10 @@ impl MatchingEngine {
         mut order: Order,
         exchange: &Exchange,
         rc: &mut Connection
-    ) {
+    ) -> (Decimal, Decimal, OrderStatus) {
         let mut orderbook = self.orderbooks.get_mut(&exchange).unwrap();
         let users = &mut self.users;
-        orderbook.fill_limit_order(price, order, exchange, rc, users, true);
+        orderbook.fill_limit_order(price, order, exchange, rc, users, true)
     }
     // pub fn add_limit_order(
     //     &mut self,

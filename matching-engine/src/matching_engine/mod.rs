@@ -97,8 +97,7 @@ pub struct ScyllaOrder {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RecievedOrder {
-    #[serde(skip)]
-    pub id: OrderId,
+    pub id: i64,
     pub user_id: Id,
     pub symbol: Symbol,
     pub price: Price,

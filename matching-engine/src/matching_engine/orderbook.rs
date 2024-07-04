@@ -70,11 +70,14 @@ impl Orderbook {
         rc: &mut Connection,
         users: &mut Users,
         should_exectute_trade: bool
-    ) {
+    ) -> (Decimal, Decimal, OrderStatus) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
             OrderSide::Bid => Orderbook::ask_limits(&mut self.asks),
         };
+        let mut executed_quantity = dec!(0);
+        let mut executed_quote_quantity = dec!(0);
+        let mut order_status = order.order_status.clone();
         println!("Recived an {} Market order", order.order_side);
         for limit_order in sorted_orders {
             let price = limit_order.price.clone();
@@ -87,10 +90,15 @@ impl Orderbook {
                 users,
                 should_exectute_trade
             );
+            let executed_quantity_limit = order.initial_quantity - order.quantity;
+            executed_quantity += executed_quantity_limit;
+            executed_quote_quantity += executed_quantity_limit * price;
+            order_status = order.order_status.clone();
             if order.is_filled() {
                 break;
             }
         }
+        (executed_quantity, executed_quote_quantity, order_status)
     }
     pub fn fill_limit_order(
         &mut self,
@@ -100,16 +108,18 @@ impl Orderbook {
         rc: &mut Connection,
         users: &mut Users,
         should_exectute_trade: bool
-    ) {
+    ) -> (Decimal, Decimal, OrderStatus) {
         println!("Recived an {} Limit order", order.order_side);
-        let initial_quantity = order.quantity;
+        let mut executed_quantity = dec!(0);
+        let mut executed_quote_quantity = dec!(0);
+        let mut order_status = order.order_status.clone();
         let result = match order.order_side {
             OrderSide::Ask => {
                 let sorted_bids = &mut Orderbook::bid_limits(&mut self.bids);
                 let mut i = 0;
                 if sorted_bids.len() == 0 {
                     self.add_limit_order(price, order);
-                    return;
+                    return (executed_quantity, executed_quote_quantity, order_status);
                 }
                 while i < sorted_bids.len() {
                     if price > sorted_bids[i].price {
@@ -125,6 +135,10 @@ impl Orderbook {
                         users,
                         should_exectute_trade
                     );
+                    let executed_quantity_limit = order.initial_quantity - order.quantity;
+                    executed_quantity += executed_quantity_limit;
+                    executed_quote_quantity += executed_quantity_limit * price;
+                    order_status = order.order_status.clone();
                     if order.quantity > dec!(0) && sorted_bids.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
                         break;
@@ -137,7 +151,7 @@ impl Orderbook {
                 let mut i = 0;
                 if sorted_asks.len() == 0 {
                     self.add_limit_order(price, order);
-                    return;
+                    return (executed_quantity, executed_quote_quantity, order_status);
                 }
                 while i < sorted_asks.len() {
                     if price < sorted_asks[i].price {
@@ -154,7 +168,10 @@ impl Orderbook {
                         users,
                         should_exectute_trade
                     );
-
+                    let executed_quantity_limit = order.initial_quantity - order.quantity;
+                    executed_quantity += executed_quantity_limit;
+                    executed_quote_quantity += executed_quantity_limit * price;
+                    order_status = order.order_status.clone();
                     if order.quantity > dec!(0) && sorted_asks.get(i + 1).is_none() {
                         self.add_limit_order(price, order);
                         break;
@@ -163,6 +180,7 @@ impl Orderbook {
                 }
             }
         };
+        (executed_quantity, executed_quote_quantity, order_status)
     }
     pub fn bids_by_user(&self, user_id: Id) -> Vec<Limit> {
         let mut bids = &self.bids;
@@ -344,6 +362,8 @@ pub struct Order {
     pub initial_quantity: Quantity,
     pub quantity: Quantity,
     pub order_side: OrderSide,
+    pub order_type: OrderType,
+    pub order_status: OrderStatus,
     pub is_market_maker: bool,
     pub timestamp: u64,
 }
@@ -370,6 +390,10 @@ impl Order {
             initial_quantity: quantity,
             quantity,
             is_market_maker,
+            order_status: OrderStatus::InProgress,
+            order_type: {
+                if is_market_maker { OrderType::Limit } else { OrderType::Market }
+            },
             timestamp,
         }
     }
@@ -416,6 +440,8 @@ impl Limit {
                     println!("\tAn order was matched");
                     limit_order.quantity -= remaining_quantity;
                     order.quantity = dec!(0);
+                    order.order_status = OrderStatus::Filled;
+                    limit_order.order_status = OrderStatus::PartiallyFilled;
                     if should_exectute_trade == true {
                         *trade_id += 1;
                         let timestamp = get_epoch_micro();
@@ -438,8 +464,8 @@ impl Limit {
                             quantity: remaining_quantity,
                             exchange_price,
                             is_market_maker: order.is_market_maker,
-                            order_status: OrderStatus::Filled,
-                            client_order_status: OrderStatus::PartiallyFilled,
+                            order_status: order.order_status.clone(),
+                            client_order_status: limit_order.order_status.clone(),
                             order_id: order.id,
                             client_order_id: limit_order.id,
                             timestamp,
@@ -510,6 +536,8 @@ impl Limit {
                     };
                     remaining_quantity -= limit_order.quantity;
                     order.quantity -= limit_order.quantity;
+                    order.order_status = order_status;
+                    limit_order.order_status = OrderStatus::Filled;
                     if should_exectute_trade == true {
                         *trade_id += 1;
 
@@ -533,8 +561,8 @@ impl Limit {
                             quantity: limit_order.quantity,
                             exchange_price,
                             is_market_maker: order.is_market_maker,
-                            order_status,
-                            client_order_status: OrderStatus::Filled,
+                            order_status: order.order_status.clone(),
+                            client_order_status: limit_order.order_status.clone(),
                             order_id: order.id,
                             client_order_id: limit_order.id,
                             timestamp,

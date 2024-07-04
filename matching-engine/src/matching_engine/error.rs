@@ -1,6 +1,7 @@
+use enum_stringify::EnumStringify;
 use serde::{ Deserialize, Serialize };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, EnumStringify)]
 pub enum MatchingEngineErrors {
     ExchangeAlreadyExist,
     AskedMoreThanTradeable,
