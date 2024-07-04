@@ -10,7 +10,10 @@
 - **Scylla DB:** Velocity uses Scylla DB for low-latency database interactions, recovering orderbooks ensuring things never go wrong.
 ### In-Memory Storage
 - **Orderbooks and User Balances:** The orderbooks for registered markets and user balances are stored directly in the engine's memory. This allows for quick access and updates.
-- **Recovery Mechanism:** In case the engine goes down, Scylla DB helps recover the orderbook by replaying orders from the last 24 hours. User data is also reloaded into the engine from the database.
+- **Recovery Mechanism:** 
+    - After validating the order and locking the in-memory user balance, the order is pushed into an MPSC channel, and continues processing the order and preparing the response. 
+    - Another thread picks from the channel to insert the order and lock the user's balances in the database. 
+    - If the engine goes down, ScyllaDB helps recovering the orderbook by replaying orders from the last 24 hours. User data is also reloaded from the database.
 ### Order Processing
 - **Order Placement:** Orders are queued for the matching engine in under 1 millisecond. Each market has its own dedicated thread, allowing parallel handling of orders of different markets.
 - **Order Validation and Execution:** After validation, orders are placed into a channel and picked up by a separate thread. This thread handles database entries and locks user balances. This is the secret of orderbook recovery mechanism of velocity exchange.
