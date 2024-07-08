@@ -25,9 +25,9 @@
 <center><img src="./assets/architecture.png"></center>
 
 ## Videos
-- **Architecture**
-  
-https://github.com/me-imfhd/velocity/assets/114667178/d97cca7f-2399-4c3a-8463-cfb9ce5baafc
+- **Architecture**  
+
+https://github.com/me-imfhd/velocity/assets/114667178/6fb65dba-0aee-4536-af0c-2b5a1b5d2094
 
 - **Performance Benchmarks**
   
