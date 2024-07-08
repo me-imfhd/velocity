@@ -1,0 +1,211 @@
+{
+    "clientName": "Thunder Client",
+    "collectionName": "Velocity Api Collection",
+    "collectionId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+    "dateExported": "2024-07-08T14:32:56.037Z",
+    "version": "1.2",
+    "folders": [],
+    "requests": [
+        {
+            "_id": "0bf35a16-5c4b-404f-bc59-bcacc090888a",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Ping Backend",
+            "url": "http://127.0.0.1:8080/api/v1/ping",
+            "method": "GET",
+            "sortNum": 5000,
+            "created": "2024-07-08T09:51:45.216Z",
+            "modified": "2024-07-08T09:51:45.216Z",
+            "headers": []
+        },
+        {
+            "_id": "fab36501-d89f-4cee-90fd-0e1eda6ce324",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "New User",
+            "url": "http://127.0.0.1:8080/api/v1/user/new",
+            "method": "POST",
+            "sortNum": 10000,
+            "created": "2024-07-04T14:50:22.960Z",
+            "modified": "2024-07-06T12:54:41.349Z",
+            "headers": []
+        },
+        {
+            "_id": "6b18aae6-4bd9-4f1f-b607-2e015704e030",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Deposit Balance",
+            "url": "http://127.0.0.1:8080/api/v1/user/deposit",
+            "method": "POST",
+            "sortNum": 15000,
+            "created": "2024-07-04T14:52:01.009Z",
+            "modified": "2024-07-08T13:47:09.182Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 3,\n  \"asset\": \"SOL\",\n  \"quantity\": 10\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "f70b4b47-0ac6-40e3-b014-25589e35b9ba",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Get User",
+            "url": "http://127.0.0.1:8080/api/v1/user?user_id=2",
+            "method": "GET",
+            "sortNum": 17500,
+            "created": "2024-07-04T14:53:03.148Z",
+            "modified": "2024-07-08T13:36:37.033Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "user_id",
+                    "value": "2",
+                    "isPath": false
+                }
+            ]
+        },
+        {
+            "_id": "ee4927fd-ca9d-4d08-8ef8-bc5ea7321c96",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Execute Order",
+            "url": "http://127.0.0.1:8080/api/v1/order",
+            "method": "POST",
+            "sortNum": 20000,
+            "created": "2024-07-04T14:51:19.786Z",
+            "modified": "2024-07-08T13:48:07.734Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"symbol\": \"SOL_USDT\",\n  \"price\": null,\n  \"quantity\": 10,\n  \"order_side\": \"Ask\",\n  \"order_type\": \"Market\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "0ba91159-76f0-44c8-9df7-fc83246ce259",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Open Order",
+            "url": "http://127.0.0.1:8080/api/v1/order",
+            "method": "GET",
+            "sortNum": 90000,
+            "created": "2024-07-05T18:49:41.145Z",
+            "modified": "2024-07-07T19:35:28.030Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"symbol\": \"SOL_USDT\",\n  \"order_id\": 4\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "c24e86ba-4d8e-453b-95f1-bbfc390aa6b0",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "All Open Orders",
+            "url": "http://127.0.0.1:8080/api/v1/orders",
+            "method": "GET",
+            "sortNum": 100000,
+            "created": "2024-07-05T18:49:56.905Z",
+            "modified": "2024-07-08T13:46:20.030Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 2,\n  \"symbol\": \"SOL_USDT\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "80ab9d2e-18e9-4cae-b1ba-c8dfe74de895",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Cancel Order",
+            "url": "http://127.0.0.1:8080/api/v1/order",
+            "method": "DELETE",
+            "sortNum": 105000,
+            "created": "2024-07-05T18:48:48.544Z",
+            "modified": "2024-07-08T09:48:00.399Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"symbol\": \"SOL_USDT\",\n  \"id\": 2,\n  \"price\": 100,\n  \"order_side\": \"Ask\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "f98af76f-0279-4d5f-b7ca-97c739029fdb",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Cancel All Orders",
+            "url": "http://127.0.0.1:8080/api/v1/orders",
+            "method": "DELETE",
+            "sortNum": 107500,
+            "created": "2024-07-05T18:49:04.210Z",
+            "modified": "2024-07-05T18:49:04.210Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"symbol\": \"SOL_USDT\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "75436f9f-5f79-4252-b19f-87f4ada53f0d",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Withdraw",
+            "url": "http://127.0.0.1:8080/api/v1/user/withdraw",
+            "method": "POST",
+            "sortNum": 108125,
+            "created": "2024-07-08T09:50:08.730Z",
+            "modified": "2024-07-08T09:50:08.730Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"user_id\": 1,\n  \"asset\": \"SOL\",\n  \"quantity\": 100\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "ad355744-e416-41cb-bd04-f41daeffb24c",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Get Users Orders (from db)",
+            "url": "http://127.0.0.1:8080/api/v1/user/history/orders?user_id=1",
+            "method": "GET",
+            "sortNum": 108750,
+            "created": "2024-07-04T14:52:40.415Z",
+            "modified": "2024-07-08T09:50:46.418Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "user_id",
+                    "value": "1",
+                    "isPath": false
+                }
+            ]
+        },
+        {
+            "_id": "2974af8b-a901-421a-b7ef-2f7f9a3f15c0",
+            "colId": "e2818cce-a97e-44b7-8ecd-c630a1a1f4ed",
+            "containerId": "",
+            "name": "Trade History (from db)",
+            "url": "http://127.0.0.1:8080/api/v1/trades?symbol=SOL_USDT",
+            "method": "GET",
+            "sortNum": 109375,
+            "created": "2024-07-04T14:53:39.551Z",
+            "modified": "2024-07-04T14:53:39.551Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "symbol",
+                    "value": "SOL_USDT",
+                    "isPath": false
+                }
+            ]
+        }
+    ],
+    "ref": "113FUEu7rbz6RPaSY7RS0vQjJgsOEws2EcwHElP5A063fZIlpf4KnrHba1vbn7521dcDZYsoKz2wbYZlshZ0qA"
+}
