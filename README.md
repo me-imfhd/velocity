@@ -1,10 +1,11 @@
 ## Key Features
 ## Performance Benchmarks
-- **Order Placement:** 0ms
-- **Processing Order & Publishing Events:** ~4ms (1-10ms)
-- **Recieving Order Response** ~6ms
-- **Order Saving and Balance Locking Parallely:** ~10ms (5-40ms)
-- **Database Updates:** ~25ms per trade (updating orders, updating balances, and inserting trades)
+- **Order Placement:** <1ms
+- **Processing Order & Publishing Events:** ~4ms (1-10ms) min
+- **Recieving Order Response** ~6ms-10ms
+- **Persiting Orderbook Mutations Parallely:** ~10ms (5-40ms)
+- **Database Updates:** ~25-40ms per trade (updating orders, updating balances, and inserting trades)
+
 ## Architecture
 ### Database
 - **Scylla DB:** Velocity uses Scylla DB for low-latency database interactions, recovering orderbooks ensuring things never go wrong.
@@ -21,7 +22,7 @@
 - **Balance Updates:** When an order is matched, the system exchanges traders' balances. Then the trades, ticker & depth and order updates are streamed and database is filled via a filler queue.
 - **Database and Broadcasting:** The queue helps fill our database for long-term storage. We use WebSockets and pub/sub mechanisms to broadcast trades, tickers, and depth updates to subscribers and stream private order updates to the order maker from the matching engine directly before the queue.
 
-<center><img src="./architecture.png"></center>
+<center><img src="./assets/architecture.png"></center>
 
 ## Videos
 - **Architecture**
@@ -31,6 +32,20 @@ https://github.com/me-imfhd/velocity/assets/114667178/d97cca7f-2399-4c3a-8463-cf
 - **Performance Benchmarks**
   
 https://github.com/me-imfhd/velocity/assets/114667178/976cf18e-29c4-47c6-aee2-12e6ac512e58
+
+## Order Request Types:
+- **Limit/Market** 
+    - Market order are completely filled, lead by quote requests first, & is not stored. 
+    - Completely filled limit orders are removed from orderbook.
+- **Cancel/CancelAll** 
+    - Cancelled orders are removed from orderbook.
+- **OpenOrder/OpenOrders**
+    - Consists of only partially filled limit orders.
+
+## Api Collection
+<center><img src="./assets/api_col.png"></center>
+
+- **Check assets/api_collection.json for more**
 
 ## Remaining:
 - Authentication
