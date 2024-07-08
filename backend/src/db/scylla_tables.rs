@@ -11,6 +11,7 @@ impl ScyllaDb {
         self.create_keyspace().await?;
         self.create_user_table().await?;
         self.create_order_table().await?;
+        self.cancel_order_table().await?;
         self.create_trade_table().await?;
         self.create_market_table().await?;
         self.create_ticker_table().await?;
@@ -52,9 +53,27 @@ impl ScyllaDb {
             price text,
             initial_quantity text,
             filled_quantity text, 
+            quote_quantity text,
+            filled_quote_quantity text,
             order_type text,
             order_side text,
             order_status text,
+            timestamp bigint,
+            PRIMARY KEY (id, symbol)
+        );
+      "#;
+        self.session.query(create_order_table, &[]).await?;
+        Ok(())
+    }
+    async fn cancel_order_table(&self) -> Result<()> {
+        let create_order_table: &str =
+            r#"
+        CREATE TABLE IF NOT EXISTS keyspace_1.cancel_order_table (
+            id bigint,
+            user_id bigint,
+            order_side text,
+            symbol text,
+            price text,
             timestamp bigint,
             PRIMARY KEY (id, symbol)
         );
@@ -70,7 +89,7 @@ impl ScyllaDb {
             symbol text,
             quantity text,
             quote_quantity text,
-            is_market_maker boolean,
+            is_buyer_maker boolean,
             price text,
             timestamp bigint,
             PRIMARY KEY (id, symbol)
@@ -125,6 +144,8 @@ pub struct ScyllaOrder {
     pub price: String,
     pub initial_quantity: String,
     pub filled_quantity: String,
+    pub quote_quantity: String,
+    pub filled_quote_quantity: String,
     pub order_type: String,
     pub order_side: String,
     pub order_status: String,
@@ -143,7 +164,7 @@ pub struct ScyllaTrade {
     pub symbol: String,
     pub quantity: String,
     pub quote_quantity: String,
-    pub is_market_maker: bool,
+    pub is_buyer_maker: bool,
     pub price: String,
     pub timestamp: i64,
 }

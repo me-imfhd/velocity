@@ -1,9 +1,10 @@
 use std::{ error::Error, str::FromStr };
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use scylla::transport::errors::QueryError;
 
 use crate::db::{
-    get_epoch_ms,
+    get_epoch_micros,
     schema::{ Id, Order, OrderId, OrderSide, OrderStatus, OrderType, Price, Quantity, Symbol },
     scylla_tables::ScyllaOrder,
     ScyllaDb,
@@ -19,13 +20,15 @@ impl Order {
         order_type: OrderType,
         symbol: Symbol
     ) -> Order {
-        let timestamp = get_epoch_ms();
+        let timestamp = get_epoch_micros();
         Order {
             id,
             user_id,
-            filled_quantity: rust_decimal_macros::dec!(0.0),
-            initial_quantity,
             price,
+            initial_quantity,
+            quote_quantity: initial_quantity * price,
+            filled_quantity: dec!(0),
+            filled_quote_quantity: dec!(0),
             order_side,
             order_status: OrderStatus::InProgress,
             order_type,
@@ -40,6 +43,8 @@ impl Order {
             user_id: self.user_id,
             symbol: self.symbol.to_string(),
             filled_quantity: self.filled_quantity.to_string(),
+            filled_quote_quantity: self.filled_quote_quantity.to_string(),
+            quote_quantity: self.quote_quantity.to_string(),
             price: self.price.to_string(),
             initial_quantity: self.initial_quantity.to_string(),
             order_side: self.order_side.to_string(),
@@ -55,6 +60,8 @@ impl ScyllaOrder {
             timestamp: self.timestamp,
             user_id: self.user_id,
             symbol: self.symbol.to_string(),
+            filled_quote_quantity: Decimal::from_str(&self.filled_quote_quantity).unwrap(),
+            quote_quantity: Decimal::from_str(&self.quote_quantity).unwrap(),
             filled_quantity: Decimal::from_str(&self.filled_quantity).unwrap(),
             price: Decimal::from_str(&self.price).unwrap(),
             initial_quantity: Decimal::from_str(&self.initial_quantity).unwrap(),
@@ -76,11 +83,13 @@ impl ScyllaDb {
                 price,
                 initial_quantity,
                 filled_quantity, 
+                quote_quantity,
+                filled_quote_quantity,
                 order_type,
                 order_side,
                 order_status,
                 timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         "#;
         let order = order.to_scylla_order();
         self.session.query(s, order).await?;
@@ -96,6 +105,8 @@ impl ScyllaDb {
                 price,
                 initial_quantity,
                 filled_quantity, 
+                quote_quantity,
+                filled_quote_quantity,
                 order_type,
                 order_side,
                 order_status,
@@ -122,6 +133,8 @@ impl ScyllaDb {
                 price,
                 initial_quantity,
                 filled_quantity, 
+                quote_quantity,
+                filled_quote_quantity,
                 order_type,
                 order_side,
                 order_status,
@@ -147,6 +160,8 @@ impl ScyllaDb {
                     price = ?,
                     initial_quantity = ?,
                     filled_quantity = ?, 
+                    quote_quantity = ?,
+                    filled_quote_quantity = ?,
                     order_type = ?,
                     order_side = ?,
                     order_status = ?
@@ -157,6 +172,8 @@ impl ScyllaDb {
             order.price,
             order.initial_quantity,
             order.filled_quantity,
+            order.quote_quantity,
+            order.filled_quote_quantity,
             order.order_type,
             order.order_side,
             order.order_status,

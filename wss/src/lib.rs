@@ -70,7 +70,7 @@ pub enum OrderStatus {
     InProgress,
     Filled,
     PartiallyFilled,
-    Failed,
+    Cancelled
 }
 impl OrderStatus {
     pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {

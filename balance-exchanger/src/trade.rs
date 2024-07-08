@@ -8,7 +8,7 @@ use crate::{ get_epoch_ms, Price, Quantity, ScyllaDb, ScyllaTrade, Symbol, Trade
 impl Trade {
     pub fn new(
         id: i64,
-        is_market_maker: bool,
+        is_buyer_maker: bool,
         price: Price,
         quantity: Quantity,
         symbol: Symbol,
@@ -20,7 +20,7 @@ impl Trade {
             symbol,
             quantity: quantity,
             quote_quantity: quote_quantity,
-            is_market_maker,
+            is_buyer_maker,
             price: price,
             timestamp: timestamp as i64,
         }
@@ -29,7 +29,7 @@ impl Trade {
         ScyllaTrade {
             id: self.id,
             symbol: self.symbol.to_string(),
-            is_market_maker: self.is_market_maker,
+            is_buyer_maker: self.is_buyer_maker,
             price: self.price.to_string(),
             quantity: self.quantity.to_string(),
             quote_quantity: self.quote_quantity.to_string(),
@@ -42,7 +42,7 @@ impl ScyllaTrade {
         Trade {
             id: self.id,
             symbol: self.symbol.to_string(),
-            is_market_maker: self.is_market_maker,
+            is_buyer_maker: self.is_buyer_maker,
             price: Decimal::from_str(&self.price).unwrap(),
             quantity: Decimal::from_str(&self.quantity).unwrap(),
             quote_quantity: Decimal::from_str(&self.quote_quantity).unwrap(),
@@ -59,7 +59,7 @@ impl ScyllaDb {
                 symbol,
                 quantity,
                 quote_quantity,
-                is_market_maker,
+                is_buyer_maker,
                 price,
                 timestamp
             ) VALUES (?, ?, ?, ?, ?, ?, ?);

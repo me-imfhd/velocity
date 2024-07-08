@@ -4,7 +4,7 @@ use rust_decimal::prelude::*;
 use scylla::transport::errors::QueryError;
 
 use crate::db::{
-    get_epoch_ms,
+    get_epoch_micros,
     schema::{ Price, Quantity, Symbol, Trade },
     scylla_tables::ScyllaTrade,
     ScyllaDb,
@@ -13,19 +13,19 @@ use crate::db::{
 impl Trade {
     pub fn new(
         id: i64,
-        is_market_maker: bool,
+        is_buyer_maker: bool,
         price: Price,
         quantity: Quantity,
         symbol: Symbol
     ) -> Trade {
-        let timestamp = get_epoch_ms();
+        let timestamp = get_epoch_micros();
         let quote_quantity = price * quantity;
         Trade {
             id,
             symbol,
             quantity: quantity,
             quote_quantity: quote_quantity,
-            is_market_maker,
+            is_buyer_maker,
             price: price,
             timestamp: timestamp as i64,
         }
@@ -34,7 +34,7 @@ impl Trade {
         ScyllaTrade {
             id: self.id,
             symbol: self.symbol.to_string(),
-            is_market_maker: self.is_market_maker,
+            is_buyer_maker: self.is_buyer_maker,
             price: self.price.to_string(),
             quantity: self.quantity.to_string(),
             quote_quantity: self.quote_quantity.to_string(),
@@ -47,7 +47,7 @@ impl ScyllaTrade {
         Trade {
             id: self.id,
             symbol: self.symbol.to_string(),
-            is_market_maker: self.is_market_maker,
+            is_buyer_maker: self.is_buyer_maker,
             price: Decimal::from_str(&self.price).unwrap(),
             quantity: Decimal::from_str(&self.quantity).unwrap(),
             quote_quantity: Decimal::from_str(&self.quote_quantity).unwrap(),
@@ -64,7 +64,7 @@ impl ScyllaDb {
                 symbol,
                 quantity,
                 quote_quantity,
-                is_market_maker,
+                is_buyer_maker,
                 price,
                 timestamp
             ) VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -81,13 +81,13 @@ impl ScyllaDb {
                 symbol,
                 quantity,
                 quote_quantity,
-                is_market_maker,
+                is_buyer_maker,
                 price,
                 timestamp
             FROM keyspace_1.trade_table
             WHERE symbol = ? ALLOW FILTERING;
         "#;
-        let res = self.session.query(s,(symbol,)).await?;
+        let res = self.session.query(s, (symbol,)).await?;
         let mut trades = res.rows_typed::<ScyllaTrade>()?;
         let trades: Vec<Trade> = trades.map(|trade| trade.unwrap().from_scylla_trade()).collect();
         Ok(trades)
@@ -100,7 +100,7 @@ impl ScyllaDb {
                 symbol,
                 quantity,
                 quote_quantity,
-                is_market_maker,
+                is_buyer_maker,
                 price,
                 timestamp
             FROM keyspace_1.trade_table

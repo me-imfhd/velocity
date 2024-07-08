@@ -28,6 +28,8 @@ impl Order {
             user_id: self.user_id,
             symbol: self.symbol.to_string(),
             filled_quantity: self.filled_quantity.to_string(),
+            quote_quantity: self.quote_quantity.to_string(),
+            filled_quote_quantity: self.filled_quote_quantity.to_string(),
             price: self.price.to_string(),
             initial_quantity: self.initial_quantity.to_string(),
             order_side: self.order_side.to_string(),
@@ -44,6 +46,8 @@ impl ScyllaOrder {
             user_id: self.user_id,
             symbol: self.symbol.to_string(),
             filled_quantity: Decimal::from_str(&self.filled_quantity).unwrap(),
+            filled_quote_quantity: Decimal::from_str(&self.filled_quote_quantity).unwrap(),
+            quote_quantity: Decimal::from_str(&self.quote_quantity).unwrap(),
             price: Decimal::from_str(&self.price).unwrap(),
             initial_quantity: Decimal::from_str(&self.initial_quantity).unwrap(),
             order_side: OrderSide::from_str(&self.order_side).unwrap(),
@@ -67,7 +71,9 @@ impl ScyllaDb {
                 symbol,
                 price,
                 initial_quantity,
-                filled_quantity, 
+                filled_quantity,
+                quote_quantity,
+                filled_quote_quantity,
                 order_type,
                 order_side,
                 order_status,
@@ -90,6 +96,7 @@ impl ScyllaDb {
             UPDATE keyspace_1.order_table 
             SET
                 filled_quantity = ?, 
+                filled_quote_quantity = ?,
                 order_status = ?
                 WHERE id = ? AND symbol = ?;
         "#;

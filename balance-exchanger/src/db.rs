@@ -37,9 +37,11 @@ impl ScyllaDb {
         queue_trade: &Filler,
         mut order_1: Order,
         mut order_2: Order
-    ) -> ((String, String, OrderId, Symbol), (String, String, OrderId, Symbol)) {
+    ) -> ((String, String, String, OrderId, Symbol), (String, String, String, OrderId, Symbol)) {
         order_1.filled_quantity += queue_trade.quantity;
+        order_1.filled_quote_quantity += queue_trade.quantity * queue_trade.exchange_price;
         order_2.filled_quantity += queue_trade.quantity;
+        order_2.filled_quote_quantity += queue_trade.quantity * queue_trade.exchange_price;
         order_1.order_status = queue_trade.order_status.clone();
         order_2.order_status = queue_trade.client_order_status.clone();
         let serialized_order_1 = order_1.to_scylla_order();
@@ -47,12 +49,14 @@ impl ScyllaDb {
         (
             (
                 serialized_order_1.filled_quantity,
+                serialized_order_1.filled_quote_quantity,
                 serialized_order_1.order_status,
                 serialized_order_1.id,
                 serialized_order_1.symbol,
             ),
             (
                 serialized_order_2.filled_quantity,
+                serialized_order_2.filled_quote_quantity,
                 serialized_order_2.order_status,
                 serialized_order_2.id,
                 serialized_order_2.symbol,
@@ -65,7 +69,7 @@ impl ScyllaDb {
     ) -> ((i64, String, String, String, bool, String, i64), Trade) {
         let trade = Trade::new(
             queue_trade.trade_id,
-            queue_trade.is_market_maker,
+            queue_trade.is_buyer_maker,
             queue_trade.exchange_price,
             queue_trade.quantity,
             queue_trade.exchange.symbol.to_string(),
@@ -78,7 +82,7 @@ impl ScyllaDb {
                 serialized_trade.symbol,
                 serialized_trade.quantity,
                 serialized_trade.quote_quantity,
-                serialized_trade.is_market_maker,
+                serialized_trade.is_buyer_maker,
                 serialized_trade.price,
                 serialized_trade.timestamp,
             ),

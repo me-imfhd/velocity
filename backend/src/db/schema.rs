@@ -48,7 +48,7 @@ pub enum OrderStatus {
     InProgress,
     Filled,
     PartiallyFilled,
-    Failed,
+    Cancelled
 }
 impl OrderStatus {
     pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
@@ -119,6 +119,8 @@ pub struct Order {
     pub price: Price,
     pub initial_quantity: Quantity,
     pub filled_quantity: Quantity,
+    pub quote_quantity: Quantity,
+    pub filled_quote_quantity: Quantity,
     pub order_type: OrderType,
     pub order_side: OrderSide,
     pub order_status: OrderStatus,
@@ -137,7 +139,7 @@ pub struct Trade {
     pub symbol: Symbol,
     pub quantity: Quantity,
     pub quote_quantity: Quantity,
-    pub is_market_maker: bool,
+    pub is_buyer_maker: bool,
     pub price: Price,
     pub timestamp: i64,
 }

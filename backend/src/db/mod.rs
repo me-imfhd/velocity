@@ -43,6 +43,6 @@ impl ScyllaDb {
         Ok(total_users + 1)
     }
 }
-pub fn get_epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+pub fn get_epoch_micros() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros()
 }

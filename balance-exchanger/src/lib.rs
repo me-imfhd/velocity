@@ -81,7 +81,7 @@ pub struct Filler {
     exchange: Exchange,
     quantity: Quantity,
     exchange_price: Price,
-    is_market_maker: bool,
+    is_buyer_maker: bool,
     post_users: PostUsers,
     order_status: OrderStatus,
     client_order_status: OrderStatus,
@@ -102,6 +102,8 @@ pub struct Order {
     pub price: Price,
     pub initial_quantity: Quantity,
     pub filled_quantity: Quantity,
+    pub quote_quantity: Quantity,
+    pub filled_quote_quantity: Quantity,
     pub order_type: OrderType,
     pub order_side: OrderSide,
     pub order_status: OrderStatus,
@@ -115,6 +117,8 @@ pub struct ScyllaOrder {
     pub price: String,
     pub initial_quantity: String,
     pub filled_quantity: String,
+    pub quote_quantity: String,
+    pub filled_quote_quantity: String,
     pub order_type: String,
     pub order_side: String,
     pub order_status: String,
@@ -126,7 +130,7 @@ pub enum OrderStatus {
     InProgress,
     Filled,
     PartiallyFilled,
-    Failed,
+    Cancelled
 }
 impl OrderStatus {
     pub fn from_str(asset_to_match: &str) -> Result<Self, ()> {
@@ -177,7 +181,7 @@ pub struct Trade {
     pub symbol: Symbol,
     pub quantity: Quantity,
     pub quote_quantity: Quantity,
-    pub is_market_maker: bool,
+    pub is_buyer_maker: bool,
     pub price: Price,
     pub timestamp: i64,
 }
@@ -187,7 +191,7 @@ pub struct ScyllaTrade {
     pub symbol: Symbol,
     pub quantity: String,
     pub quote_quantity: String,
-    pub is_market_maker: bool,
+    pub is_buyer_maker: bool,
     pub price: String,
     pub timestamp: i64,
 }
