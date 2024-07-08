@@ -1,12 +1,17 @@
 use std::{ net::TcpListener, sync::Mutex };
 
 use actix_web::{ web::{ self, scope }, App, HttpServer };
-use redis::Connection;
+use redis::{ Connection, PubSub };
 
 use crate::{
     config::GlobalConfig,
     db::ScyllaDb,
-    routes::{ order::order, ping::ping, trades::trades, user::* },
+    routes::{
+        order::*,
+        ping::ping,
+        trades::trades,
+        user::*,
+    },
 };
 
 pub struct Application {
@@ -37,7 +42,7 @@ pub struct AppState {
     pub redis_connection: Mutex<Connection>,
     pub reqwest: Mutex<reqwest::Client>,
 }
-async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
+async fn run<'a>(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::Error> {
     let uri = "127.0.0.1";
     let redis_uri = "redis://127.0.0.1:6379";
     let mut redis_connection = connect_redis(&redis_uri);
@@ -53,7 +58,11 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
             scope("/api/v1")
                 .app_data(app_state.clone())
                 .service(ping)
-                .service(order)
+                .service(execute_order)
+                .service(get_open_order)
+                .service(get_open_orders)
+                .service(order_cancel_all)
+                .service(order_cancel)
                 .service(trades)
                 .service(
                     scope("/user")
@@ -61,7 +70,7 @@ async fn run(listener: TcpListener) -> Result<actix_web::dev::Server, std::io::E
                         .service(get_user) // ?id
                         .service(deposit) // /deposit
                         .service(withdraw) // /withdraw
-                        .service(orders) // /orders
+                        .service(orders_history) // /orders
                 )
         )
     })

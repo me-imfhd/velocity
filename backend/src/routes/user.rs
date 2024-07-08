@@ -1,22 +1,140 @@
-use actix_web::{ web::{ Data, Json, Query }, HttpResponse };
-use serde::{ Deserialize, Serialize };
+use std::time::Duration;
 
+use actix_web::{ web::{ Data, Json, Query }, HttpResponse };
+use redis::{ Commands, Value };
+use serde::{ Deserialize, Serialize };
+use serde_json::{ from_str, to_string };
+use super::*;
 use crate::{ api::user, app::AppState, db::schema::{ Asset, Id, Quantity, User } };
 
 #[actix_web::post("/new")]
 pub async fn new_user(app_state: Data<AppState>) -> HttpResponse {
     let s_db = app_state.scylla_db.lock().unwrap();
-    let reqwest = app_state.reqwest.lock().unwrap();
-    let response = reqwest.post("http://127.0.0.1:5000/api/v1/user/new").send().await;
+    let mut con = &mut app_state.redis_connection.lock().unwrap();
+    let sub_id = uuid::Uuid::new_v4().as_u64_pair().0 as i64;
+    let req = to_string(
+        &UserRequests::NewUser(NewUser {
+            sub_id,
+        })
+    ).unwrap();
+    let response = redis::cmd("LPUSH").arg("queues:user").arg(req).query::<Value>(con);
     match response {
-        Ok(response) => {
-            let id: i64 = response.json().await.unwrap();
-            let u = User::new(id);
-            let user_created = u.clone();
-            let user = s_db.new_user(u).await;
-            match user {
-                Ok(_) => HttpResponse::Created().json(user_created),
-                Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+        Ok(_) => {
+            let mut response_result: Option<String> = None;
+            loop {
+                let result = redis::cmd("RPOP").arg(sub_id).query::<String>(&mut con);
+                if let Ok(response) = result {
+                    response_result = Some(response);
+                    break;
+                }
+            }
+            let response: String = response_result.unwrap();
+            match from_str::<User>(&response) {
+                Ok(user) => {
+                    let _ = s_db.new_user(user.clone()).await;
+                    return HttpResponse::Created().json(user);
+                }
+                Err(err) => HttpResponse::BadRequest().json(response),
+            }
+        }
+        Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+    }
+}
+
+#[actix_web::get("")]
+pub async fn get_user(
+    mut query: Query<GetUserBalances>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
+    let mut con = &mut app_state.redis_connection.lock().unwrap();
+    let sub_id = uuid::Uuid::new_v4().as_u64_pair().0 as i64;
+    query.sub_id = sub_id;
+    let req = to_string(&UserRequests::GetUserBalances(query.0)).unwrap();
+    let response = redis::cmd("LPUSH").arg("queues:user").arg(req).query::<Value>(&mut con);
+    match response {
+        Ok(_) => {
+            let mut response_result: Option<String> = None;
+            loop {
+                let result = redis::cmd("RPOP").arg(sub_id).query::<String>(&mut con);
+                if let Ok(response) = result {
+                    response_result = Some(response);
+                    break;
+                }
+            }
+            let response: String = response_result.unwrap();
+            match from_str::<User>(&response) {
+                Ok(user) => {
+                    return HttpResponse::Created().json(user);
+                }
+                Err(err) => HttpResponse::BadRequest().json(response),
+            }
+        }
+        Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+    }
+}
+
+#[actix_web::post("/deposit")]
+pub async fn deposit(
+    mut body: Json<Deposit>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
+    let s_db = app_state.scylla_db.lock().unwrap();
+    let con = &mut app_state.redis_connection.lock().unwrap();
+    let sub_id = uuid::Uuid::new_v4().as_u64_pair().0 as i64;
+    body.sub_id = sub_id;
+    let req = to_string(&UserRequests::Deposit(body.0)).unwrap();
+    let response = redis::cmd("LPUSH").arg("queues:user").arg(req).query::<Value>(con);
+    match response {
+        Ok(_) => {
+            let mut response_result: Option<String> = None;
+            loop {
+                let result = redis::cmd("RPOP").arg(sub_id).query::<String>(con);
+                if let Ok(response) = result {
+                    response_result = Some(response);
+                    break;
+                }
+            }
+            let response: String = response_result.unwrap();
+            match from_str::<User>(&response) {
+                Ok(user) => {
+                    let _ = s_db.update_user(&mut user.clone()).await;
+                    return HttpResponse::Created().json(user);
+                }
+                Err(err) => HttpResponse::BadRequest().json(response),
+            }
+        }
+        Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
+    }
+}
+
+#[actix_web::post("/withdraw")]
+pub async fn withdraw(
+    mut body: Json<Withdraw>,
+    app_state: Data<AppState>
+) -> actix_web::HttpResponse {
+    let s_db = app_state.scylla_db.lock().unwrap();
+    let con = &mut app_state.redis_connection.lock().unwrap();
+    let sub_id = uuid::Uuid::new_v4().as_u64_pair().0 as i64;
+    body.sub_id = sub_id;
+    let req = to_string(&UserRequests::Withdraw(body.0)).unwrap();
+    let response = redis::cmd("LPUSH").arg("queues:user").arg(req).query::<Value>(con);
+    match response {
+        Ok(_) => {
+            let mut response_result: Option<String> = None;
+            loop {
+                let result = redis::cmd("RPOP").arg(sub_id).query::<String>(con);
+                if let Ok(response) = result {
+                    response_result = Some(response);
+                    break;
+                }
+            }
+            let response: String = response_result.unwrap();
+            match from_str::<User>(&response) {
+                Ok(user) => {
+                    let _ = s_db.update_user(&mut user.clone()).await;
+                    return HttpResponse::Created().json(user);
+                }
+                Err(err) => HttpResponse::BadRequest().json(response),
             }
         }
         Err(err) => HttpResponse::InternalServerError().json(err.to_string()),
@@ -24,87 +142,11 @@ pub async fn new_user(app_state: Data<AppState>) -> HttpResponse {
 }
 
 #[derive(Serialize, Deserialize)]
-struct QueryId {
-    id: Id,
-}
-#[actix_web::get("")]
-pub async fn get_user(query: Query<QueryId>, app_state: Data<AppState>) -> actix_web::HttpResponse {
-    let s_db = app_state.scylla_db.lock().unwrap();
-    let result = s_db.get_user(query.id).await;
-    match result {
-        Ok(user) => HttpResponse::Ok().json(user),
-        Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct Deposit {
-    user_id: Id,
-    asset: Asset,
-    quantity: Quantity,
-}
-#[actix_web::post("/deposit")]
-pub async fn deposit(body: Json<Deposit>, app_state: Data<AppState>) -> actix_web::HttpResponse {
-    let s_db = app_state.scylla_db.lock().unwrap();
-    let reqwest = app_state.reqwest.lock().unwrap();
-    if let Err(err) = s_db.get_user(body.user_id).await {
-        return HttpResponse::NotFound().json(format!("User Not Found\n {}", err));
-    }
-
-    if
-        let Ok(response) = reqwest
-            .post("http://127.0.0.1:5000/api/v1/user/deposit")
-            .json(&body.0)
-            .send().await
-    {
-        let mut user: User = response.json().await.unwrap();
-        s_db.update_user(&mut user).await.unwrap();
-        return HttpResponse::Ok().json(user);
-    }
-
-    HttpResponse::InternalServerError().json("Try again later, matching engine is down")
-}
-#[derive(Serialize, Deserialize)]
-struct Withdraw {
-    user_id: Id,
-    asset: Asset,
-    quantity: Quantity,
-}
-#[actix_web::post("/withdraw")]
-pub async fn withdraw(body: Json<Withdraw>, app_state: Data<AppState>) -> actix_web::HttpResponse {
-    let s_db = app_state.scylla_db.lock().unwrap();
-    let reqwest = app_state.reqwest.lock().unwrap();
-    let mut result = s_db.get_user(body.user_id).await;
-    match result {
-        Ok(mut user) => {
-            if body.quantity > user.available_balance(&body.asset).unwrap() {
-                return HttpResponse::NotAcceptable().json("Over Withdrawing");
-            }
-            if
-                let Ok(response) = reqwest
-                    .post("http://127.0.0.1:5000/api/v1/user/withdraw")
-                    .json(&body.0)
-                    .send().await
-            {
-                let mut user: User = response.json().await.unwrap();
-                s_db.update_user(&mut user).await.unwrap();
-                return HttpResponse::Ok().json(user);
-            } else {
-                return HttpResponse::InternalServerError().json(
-                    "Try again later, matching engine is down"
-                );
-            }
-        }
-        Err(err) => HttpResponse::NotFound().json(format!("User Not Found\n {}", err.to_string())),
-    }
-}
-
-#[derive(Serialize, Deserialize)]
 struct UserOrders {
     user_id: Id,
 }
-#[actix_web::get("/orders")]
-pub async fn orders(
+#[actix_web::get("/history/orders")]
+pub async fn orders_history(
     query: Query<UserOrders>,
     app_state: Data<AppState>
 ) -> actix_web::HttpResponse {
