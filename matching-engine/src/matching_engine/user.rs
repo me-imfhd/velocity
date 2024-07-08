@@ -33,7 +33,7 @@ impl ScyllaUser {
 }
 
 impl Users {
-    pub fn validate_and_lock_balance(
+    pub fn validate_and_lock_limit(
         &mut self,
         order_side: OrderSide,
         exchange: &Exchange,
@@ -43,26 +43,39 @@ impl Users {
     ) -> Result<(Asset, Quantity), MatchingEngineErrors> {
         match order_side {
             OrderSide::Bid => {
-                let ava_b = self.available_balance(&exchange.quote, user_id)?;
-                let quote_quantity = price * quantity;
-                if ava_b < quote_quantity {
-                    return Err(MatchingEngineErrors::InsufficientBalance);
-                }
-                let locked_amount = self.lock_amount(&exchange.quote, user_id, quote_quantity);
+                let locked_amount = self.validate_and_lock(
+                    &exchange.quote,
+                    user_id,
+                    price * quantity
+                )?;
                 return Ok((exchange.quote, locked_amount));
             }
             OrderSide::Ask => {
-                let ava_b = self.available_balance(&exchange.base, user_id)?;
-                let base_quantity = quantity;
-                if ava_b < base_quantity {
-                    return Err(MatchingEngineErrors::InsufficientBalance);
-                }
-                let locked_amount = self.lock_amount(&exchange.base, user_id, quantity);
+                let locked_amount = self.validate_and_lock(&exchange.base, user_id, quantity)?;
                 return Ok((exchange.base, locked_amount));
             }
         }
     }
-
+    pub fn validate_and_lock_market(
+        &mut self,
+        quote: Result<Decimal, MatchingEngineErrors>,
+        order_side: &OrderSide,
+        exchange: &Exchange,
+        user_id: Id,
+        quantity: Quantity
+    ) -> Result<(Asset, Quantity), MatchingEngineErrors> {
+        let quote = quote?;
+        match order_side {
+            OrderSide::Bid => {
+                let locked_balance = self.validate_and_lock(&exchange.quote, user_id, quote)?;
+                Ok((exchange.quote, locked_balance))
+            }
+            OrderSide::Ask => {
+                let locked_balance = self.validate_and_lock(&exchange.base, user_id, quantity)?;
+                Ok((exchange.base, locked_balance))
+            }
+        }
+    }
     pub fn lock_amount(&mut self, asset: &Asset, user_id: Id, quantity: Quantity) -> Quantity {
         let user = self.users.get_mut(&user_id).unwrap();
         let mut locked_balance = user.locked_balance.get_mut(asset);
@@ -160,6 +173,19 @@ impl Users {
         let locked_balance = self.locked_balance(asset, user_id)?;
         let balance = self.balance(asset, user_id)?;
         Ok(balance - locked_balance)
+    }
+    pub fn validate_and_lock(
+        &mut self,
+        asset: &Asset,
+        user_id: Id,
+        cmp_quantity: Quantity
+    ) -> Result<Quantity, MatchingEngineErrors> {
+        let available_balance = self.available_balance(asset, user_id)?;
+        if available_balance < cmp_quantity {
+            return Err(MatchingEngineErrors::InsufficientBalance);
+        }
+        let locked_balance = self.lock_amount(asset, user_id, cmp_quantity);
+        Ok(locked_balance)
     }
     pub fn my_assets(&self, user_id: Id) -> Result<Vec<&Asset>, MatchingEngineErrors> {
         let mut user = self.users.get(&user_id).ok_or(MatchingEngineErrors::UserNotFound)?;

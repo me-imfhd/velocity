@@ -7,5 +7,7 @@ pub enum MatchingEngineErrors {
     AskedMoreThanTradeable,
     UserNotFound,
     OverWithdrawl,
-    InsufficientBalance
+    InsufficientBalance,
+    InvalidOrderId,
+    InvalidPriceLimitOrOrderSide
 }
