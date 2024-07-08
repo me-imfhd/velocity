@@ -1,7 +1,7 @@
 ## Key Features
 ## Performance Benchmarks
 - **Order Placement:** <1ms
-- **Processing Order & Publishing Events:** ~4ms (1-10ms) min
+- **Processing Order & Publishing Events:** ~4ms (1-10ms)
 - **Recieving Order Response** ~6ms-10ms
 - **Persiting Orderbook Mutations Parallely:** ~10ms (5-40ms)
 - **Database Updates:** ~25-40ms per trade (updating orders, updating balances, and inserting trades)
