@@ -32,7 +32,6 @@ impl MatchingEngine {
     pub async fn recover_all_orderbooks(
         &mut self,
         session: &Session,
-        redis_connection: &mut redis::Connection
     ) {
         let symbols = self.registered_exchanges();
         let mut orderbooks = &mut self.orderbooks;
@@ -48,7 +47,7 @@ impl MatchingEngine {
             println!("Recovering {:?} orderbook...", symbol);
             let exchange = Exchange::from_symbol(symbol.to_string()).unwrap();
             let mut orderbook = Orderbook::new(exchange.clone());
-            orderbook.recover_orderbook(session, redis_connection).await;
+            orderbook.recover_orderbook(session).await;
             orderbooks.insert(exchange, orderbook);
         }
         println!("\nOrderbook recovering complete.")
@@ -195,11 +194,11 @@ pub mod tests {
         );
 
         let bob_order = Order::new(9, 9, OrderSide::Bid, dec!(10), OrderType::Limit, ids[4]);
-        orderbook.fill_limit_order(dec!(50), bob_order, &mut rc, false);
+        orderbook.fill_limit_order(dec!(50), bob_order, false, None);
         assert_eq!(orderbook.bids.contains_key(&dec!(50)), true); // failed to match at best ask(88) so it should be added to orderbook
 
         let alice_order = Order::new(10, 10, OrderSide::Ask, dec!(10), OrderType::Limit, ids[5]);
-        orderbook.fill_limit_order(dec!(201), alice_order, &mut rc, false);
+        orderbook.fill_limit_order(dec!(201), alice_order, false, None);
         assert_eq!(orderbook.asks.contains_key(&dec!(201)), true); // failed to match at best bid(101) so it should be added to orderbook
     }
 
@@ -230,7 +229,7 @@ pub mod tests {
 
         let bid_order = Order::new(5, 5, OrderSide::Bid, dec!(40), OrderType::Limit, ids[5]);
         let bid_price_limit_1 = dec!(500);
-        orderbook.fill_limit_order(bid_price_limit_1, bid_order, &mut rc, false);
+        orderbook.fill_limit_order(bid_price_limit_1, bid_order, false, None);
         // For the Remaining Quantity a new order should be added for the price limit made by the order
         assert_eq!(
             orderbook.bids.get(&bid_price_limit_1).unwrap().orders.get(0).unwrap().quantity,
@@ -264,7 +263,7 @@ pub mod tests {
 
         let ask_order = Order::new(5, 5, OrderSide::Ask, dec!(40), OrderType::Limit, ids[5]);
         let ask_price_limit_1 = dec!(300);
-        orderbook.fill_limit_order(ask_price_limit_1, ask_order, &mut rc, false);
+        orderbook.fill_limit_order(ask_price_limit_1, ask_order, false, None);
         // Checkk all orders for that partically price limit is filled
         // println!("{:?}", orderbook.bids.get(&bid_price_limit_1).unwrap().orders);
         assert_eq!(
@@ -307,7 +306,7 @@ pub mod tests {
         );
 
         let market_order = Order::new(5, 5, OrderSide::Bid, dec!(40), OrderType::Market, ids[5]);
-        orderbook.fill_market_order(market_order, &mut rc, false);
+        orderbook.fill_market_order(market_order, false, None);
         dbg!(&orderbook.asks);
         assert_eq!(
             orderbook.asks.get(&ask_price_limit_3).unwrap().orders.get(0).unwrap().quantity,

@@ -67,9 +67,12 @@ pub fn process_order(mut orderbook: Orderbook) -> impl FnMut() {
         println!("OS Thread Created For {}", orderbook.exchange.symbol);
         let (tx, mut rx) = mpsc::unbounded_channel::<PersistOrderRequest>();
         thread::spawn(persist_requests(rx));
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Vec<RedisEmit>>();
+        thread::spawn(event_emitter(event_rx));
         loop {
             let start = Instant::now();
             let tx = tx.clone();
+            let event_tx = event_tx.clone();
             let result = redis
                 ::cmd("RPOP")
                 .arg(format!("queues:{}", orderbook.exchange.symbol))
@@ -83,7 +86,8 @@ pub fn process_order(mut orderbook: Orderbook) -> impl FnMut() {
                                 recieved_order,
                                 &mut orderbook,
                                 &mut con,
-                                tx
+                                tx,
+                                event_tx
                             ),
                         EngineRequests::CancelOrder(c_order) =>
                             EngineRequests::cancel_order(
@@ -111,7 +115,28 @@ pub fn process_order(mut orderbook: Orderbook) -> impl FnMut() {
         }
     }
 }
-
+pub fn event_emitter(mut rx: UnboundedReceiver<Vec<RedisEmit>>) -> impl FnMut() {
+    move || {
+        let mut con = connect_redis("redis://127.0.0.1:6379");
+        loop {
+            if let Ok(events) = rx.try_recv() {
+                for event in events {
+                    redis
+                        ::cmd(&event.cmd)
+                        .arg(event.arg_1)
+                        .arg(event.arg_2)
+                        .query::<Value>(&mut con);
+                }
+            }
+        }
+    }
+}
+pub struct RedisEmit {
+    cmd: String,
+    arg_1: String,
+    arg_2: String,
+}
+pub type EventTranmitter = UnboundedSender<Vec<RedisEmit>>;
 pub fn persist_requests(mut rx: UnboundedReceiver<PersistOrderRequest>) -> impl FnMut() {
     move || {
         let session = TOKIO_RUNTIME.block_on(

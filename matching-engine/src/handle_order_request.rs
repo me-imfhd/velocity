@@ -8,6 +8,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     error::MatchingEngineErrors,
     orderbook::{ Order, Orderbook },
+    EventTranmitter,
     Exchange,
     Id,
     OrderCancelInfo,
@@ -71,7 +72,8 @@ impl EngineRequests {
         mut recieved_order: RecievedOrder,
         orderbook: &mut Orderbook,
         con: &mut Connection,
-        tx: UnboundedSender<PersistOrderRequest>
+        tx: UnboundedSender<PersistOrderRequest>,
+        event_tx: EventTranmitter
     ) {
         println!("Recieved Order");
         let sub_id = recieved_order.id;
@@ -138,7 +140,7 @@ impl EngineRequests {
         let (filled_quantity, filled_quote_quantity, order_status) = orderbook.process_order(
             recieved_order.clone(),
             order_id,
-            con
+            event_tx
         );
         let response = RecievedOrder {
             id: order_id as i64,

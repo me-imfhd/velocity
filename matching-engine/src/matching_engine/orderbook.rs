@@ -24,7 +24,10 @@ use serde::{ Deserialize, Serialize };
 use serde_json::to_string;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use tokio::sync::mpsc::UnboundedSender;
 use std::{ clone, collections::HashMap };
+use crate::{ EventTranmitter, RedisEmit };
+
 use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Orderbook {
@@ -44,10 +47,10 @@ impl Orderbook {
             bids: HashMap::new(),
         }
     }
-    pub async fn recover_orderbook(&mut self, session: &Session, rc: &mut redis::Connection) {
+    pub async fn recover_orderbook(&mut self, session: &Session) {
         self.recover_trade_id(&session).await;
         self.recover_order_id(&session).await;
-        self.replay_orders(rc, &session).await;
+        self.replay_orders(&session).await;
     }
     async fn recover_trade_id(&mut self, session: &Session) {
         let s = r#"
@@ -67,7 +70,7 @@ impl Orderbook {
         let order_id = res.next().transpose().unwrap().unwrap().0;
         self.order_id = order_id as u64;
     }
-    async fn replay_orders(&mut self, rc: &mut redis::Connection, session: &Session) {
+    async fn replay_orders(&mut self, session: &Session) {
         let current_time = get_epoch_ms() as i64;
         let since = 1000 * 60 * 60 * 24; // 24 hours in millis
         let from_time = current_time - since;
@@ -155,9 +158,9 @@ impl Orderbook {
                         replay_order.user_id as u64
                     );
                     let _ = match replay_order.order_type {
-                        OrderType::Market => self.fill_market_order(order, rc, false),
+                        OrderType::Market => self.fill_market_order(order, false, None),
                         OrderType::Limit =>
-                            self.fill_limit_order(replay_order.price, order, rc, false),
+                            self.fill_limit_order(replay_order.price, order, false, None),
                     };
                 }
             }
@@ -168,7 +171,7 @@ impl Orderbook {
         &mut self,
         recieved_order: RecievedOrder,
         order_id: OrderId,
-        rc: &mut Connection
+        event_tx: EventTranmitter
     ) -> (Decimal, Decimal, OrderStatus) {
         let order = Order::new(
             order_id as u64,
@@ -179,8 +182,10 @@ impl Orderbook {
             recieved_order.user_id as u64
         );
         match recieved_order.order_type {
-            OrderType::Market => { self.fill_market_order(order, rc, true) }
-            OrderType::Limit => { self.fill_limit_order(recieved_order.price, order, rc, true) }
+            OrderType::Market => { self.fill_market_order(order, true, Some(event_tx)) }
+            OrderType::Limit => {
+                self.fill_limit_order(recieved_order.price, order, true, Some(event_tx))
+            }
         }
     }
     pub fn increment_order_id(&mut self) -> OrderId {
@@ -212,8 +217,8 @@ impl Orderbook {
     pub fn fill_market_order(
         &mut self,
         mut order: Order,
-        rc: &mut Connection,
-        should_exectute_trade: bool
+        should_exectute_trade: bool,
+        event_tx: Option<EventTranmitter>
     ) -> (Decimal, Decimal, OrderStatus) {
         let sorted_orders = match order.order_side {
             OrderSide::Ask => Orderbook::bid_limits(&mut self.bids),
@@ -229,9 +234,9 @@ impl Orderbook {
                 order,
                 &self.exchange,
                 price,
-                rc,
                 &mut self.trade_id,
-                should_exectute_trade
+                should_exectute_trade,
+                event_tx.clone()
             );
             let executed_quantity_limit = order.initial_quantity - order.quantity;
             executed_quantity += executed_quantity_limit;
@@ -247,8 +252,8 @@ impl Orderbook {
         &mut self,
         price: Price,
         mut order: Order,
-        rc: &mut Connection,
-        should_exectute_trade: bool
+        should_exectute_trade: bool,
+        event_tx: Option<EventTranmitter>
     ) -> (Decimal, Decimal, OrderStatus) {
         println!("Recived an {} Limit order", order.order_side);
         let mut executed_quantity = dec!(0);
@@ -271,9 +276,9 @@ impl Orderbook {
                         order,
                         &self.exchange,
                         price,
-                        rc,
                         &mut self.trade_id,
-                        should_exectute_trade
+                        should_exectute_trade,
+                        event_tx.clone()
                     );
                     let executed_quantity_limit = order.initial_quantity - order.quantity;
                     executed_quantity += executed_quantity_limit;
@@ -303,9 +308,9 @@ impl Orderbook {
                         order,
                         &self.exchange,
                         price,
-                        rc,
                         &mut self.trade_id,
-                        should_exectute_trade
+                        should_exectute_trade,
+                        event_tx.clone()
                     );
                     let executed_quantity_limit = order.initial_quantity - order.quantity;
                     executed_quantity += executed_quantity_limit;
@@ -554,9 +559,9 @@ impl Limit {
         mut order: Order,
         exchange: &Exchange,
         exchange_price: Price,
-        rc: &mut Connection,
         mut trade_id: &mut u64,
-        should_exectute_trade: bool
+        should_exectute_trade: bool,
+        event_tx: Option<EventTranmitter>
     ) -> Order {
         let mut remaining_quantity = order.quantity.clone();
         let mut i = 0;
@@ -565,6 +570,7 @@ impl Limit {
                 break;
             }
             let limit_order = &mut self.orders[i];
+            let event_tx = event_tx.clone();
             match limit_order.quantity > remaining_quantity {
                 true => {
                     println!("\tAn order was matched");
@@ -647,23 +653,31 @@ impl Limit {
                         let serialized_order_update_1 = to_string(&order_update_1).unwrap();
                         let serialized_order_update_2 = to_string(&order_update_2).unwrap();
                         let serialized_publish_trade = to_string(&publish_trade).unwrap();
+                        event_tx.unwrap().send(
+                            vec![
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("order_update:{}", trade.exchange.symbol),
+                                    arg_2: serialized_order_update_1,
+                                },
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("order_update:{}", trade.exchange.symbol),
+                                    arg_2: serialized_order_update_2,
+                                },
 
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("order_update:{}", trade.exchange.symbol))
-                            .arg(serialized_order_update_1)
-                            .query::<Value>(rc);
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("order_update:{}", trade.exchange.symbol))
-                            .arg(serialized_order_update_2)
-                            .query::<Value>(rc);
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("trades:{}", trade.exchange.symbol))
-                            .arg(serialized_publish_trade)
-                            .query::<Value>(rc);
-                        redis::cmd("LPUSH").arg("filler").arg(serialized_filler).query::<Value>(rc);
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("trade:{}", trade.exchange.symbol),
+                                    arg_2: serialized_publish_trade,
+                                },
+                                RedisEmit {
+                                    cmd: "LPUSH".to_string(),
+                                    arg_1: "filler".to_string(),
+                                    arg_2: serialized_filler,
+                                }
+                            ]
+                        );
                     }
                 }
                 false => {
@@ -750,22 +764,31 @@ impl Limit {
                         let serialized_order_update_1 = to_string(&order_update_1).unwrap();
                         let serialized_order_update_2 = to_string(&order_update_2).unwrap();
                         let serialized_publish_trade = to_string(&publish_trade).unwrap();
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("order_update:{}", trade.exchange.symbol))
-                            .arg(serialized_order_update_1)
-                            .query::<Value>(rc);
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("order_update:{}", trade.exchange.symbol))
-                            .arg(serialized_order_update_2)
-                            .query::<Value>(rc);
-                        redis
-                            ::cmd("PUBLISH")
-                            .arg(format!("trades:{}", trade.exchange.symbol))
-                            .arg(serialized_publish_trade)
-                            .query::<Value>(rc);
-                        redis::cmd("LPUSH").arg("filler").arg(serialized_filler).query::<Value>(rc);
+                        event_tx.unwrap().send(
+                            vec![
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("order_update:{}", trade.exchange.symbol),
+                                    arg_2: serialized_order_update_1,
+                                },
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("order_update:{}", trade.exchange.symbol),
+                                    arg_2: serialized_order_update_2,
+                                },
+
+                                RedisEmit {
+                                    cmd: "PUBLISH".to_string(),
+                                    arg_1: format!("trade:{}", trade.exchange.symbol),
+                                    arg_2: serialized_publish_trade,
+                                },
+                                RedisEmit {
+                                    cmd: "LPUSH".to_string(),
+                                    arg_1: "filler".to_string(),
+                                    arg_2: serialized_filler,
+                                }
+                            ]
+                        );
                     }
 
                     self.orders.remove(i);

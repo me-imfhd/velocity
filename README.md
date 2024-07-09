@@ -17,11 +17,23 @@
     - If the engine goes down, ScyllaDB helps recovering the orderbook by replaying orders from the last 24 hours. User data is also reloaded from the database.
 ### Order Processing
 - **Order Placement:** Orders are queued for the matching engine in under 1 millisecond. Each market has its own dedicated thread, allowing parallel handling of orders of different markets.
-- **Order Validation and Execution:** After validation, orders are placed into a channel and picked up by a separate thread. This thread handles database entries and locks user balances. This is the secret of orderbook recovery mechanism of velocity exchange.
+- **Order Validation & Parallel Storage:** 
+    - Limit Orders and Market Orders are validated separately, on failure response is send back to user.
+    - On sucess, users balances are locked & orders are transmitted into an another thread via a MPSC channel. 
+    - This thread handles db entries and locks user balances inside our Scylla DB.
+    - Its does some other things to also persist cancel orders to also sequentially executed when recovering orderbook.
+- **Order Execution** The bids and asks orders are structured and executed in following manner:
+    - Both of them are a hashmap of price and a limit struct, the limit struct contains all the orders for that specific price limit.
+    - Orders are tried to filled by iterating through all the orders from best limit hashmap to worst.
+    - When iterating through limit hashmap, and the limit price of that particular hashmap is cut up for the limit order. Processing of order is completed.
+    - If any remaining quantity is left, then it is stored inside the orderbook, for new orders to fill them.
+    - For every trade that occurs, it's data is transmitted to an event emitter thread of the market via an another MPSC channel which emits relevant pub sub events and queues parallely.
+    - After order has been processed fully, finally we send back the response to user via redis lists.
 ### Trade Matching
-- **Balance Updates:** When an order is matched, the system exchanges traders' balances. Then the trades, ticker & depth and order updates are streamed and database is filled via a filler queue.
+- **Balance Updates:** When an order is matched, the system exchanges traders' balances. Then the trades, ticker & depth and order updates are published and database is filled via a filler queue.
 - **Database and Broadcasting:** The queue helps fill our database for long-term storage. We use WebSockets and pub/sub mechanisms to broadcast trades, tickers, and depth updates to subscribers and stream private order updates to the order maker from the matching engine directly before the queue.
 
+(this is only a high-to-medium level architecture)
 <center><img src="./assets/architecture.png"></center>
 
 ## Videos
