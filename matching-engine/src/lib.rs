@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     fmt::format,
     io::Write,
+    rc::Rc,
     sync::{ mpsc::Sender, Arc, Mutex },
     thread,
     time::Instant,
@@ -24,6 +25,7 @@ use serde_json::{ from_str, to_string };
 use tokio::{
     runtime::{ Builder, Runtime },
     sync::mpsc::{ self, UnboundedReceiver, UnboundedSender },
+    task::JoinSet,
 };
 pub mod matching_engine;
 pub mod handle_order_request;
@@ -115,6 +117,12 @@ pub fn process_order(mut orderbook: Orderbook) -> impl FnMut() {
         }
     }
 }
+pub struct RedisEmit {
+    cmd: String,
+    arg_1: String,
+    arg_2: String,
+}
+pub type EventTranmitter = UnboundedSender<Vec<RedisEmit>>;
 pub fn event_emitter(mut rx: UnboundedReceiver<Vec<RedisEmit>>) -> impl FnMut() {
     move || {
         let mut con = connect_redis("redis://127.0.0.1:6379");
@@ -131,40 +139,34 @@ pub fn event_emitter(mut rx: UnboundedReceiver<Vec<RedisEmit>>) -> impl FnMut() 
         }
     }
 }
-pub struct RedisEmit {
-    cmd: String,
-    arg_1: String,
-    arg_2: String,
-}
-pub type EventTranmitter = UnboundedSender<Vec<RedisEmit>>;
-pub fn persist_requests(mut rx: UnboundedReceiver<PersistOrderRequest>) -> impl FnMut() {
-    move || {
-        let session = TOKIO_RUNTIME.block_on(
-            SessionBuilder::new().known_node("127.0.0.1:9042").build()
-        ).unwrap();
-        loop {
-            if let Ok(order) = rx.try_recv() {
-                let start = Instant::now();
-                match order {
-                    PersistOrderRequest::Save(s_order) => {
-                        TOKIO_RUNTIME.block_on(
-                            new_order(
-                                &session,
-                                s_order.recieved_order,
-                                s_order.locked_balance,
-                                s_order.asset
-                            )
-                        );
-                    }
-                    PersistOrderRequest::Cancel(c_order) =>
-                        TOKIO_RUNTIME.block_on(persist_order_cancel(&session, c_order)),
-                    PersistOrderRequest::CancelAll(c_all) =>
-                        TOKIO_RUNTIME.block_on(persist_order_cancel_all(&session, c_all)),
-                }
 
-                println!("\tPersisted order request in {}ms\n", start.elapsed().as_millis());
+pub static SESSION: Lazy<Session> = Lazy::new(|| {
+    TOKIO_RUNTIME.block_on(SessionBuilder::new().known_node("127.0.0.1:9042").build()).unwrap()
+});
+pub fn persist_requests(mut rx: UnboundedReceiver<PersistOrderRequest>) -> impl FnOnce() {
+    move || {
+        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        rt.block_on(async move {
+            loop {
+                if let Some(order) = rx.recv().await {
+                    tokio::spawn(async move {
+                        match order {
+                            PersistOrderRequest::Save(s_order) =>
+                                new_order(
+                                    &SESSION,
+                                    s_order.recieved_order,
+                                    s_order.locked_balance,
+                                    s_order.asset
+                                ).await,
+                            PersistOrderRequest::Cancel(c_order) =>
+                                persist_order_cancel(&SESSION, c_order).await,
+                            PersistOrderRequest::CancelAll(c_all) =>
+                                persist_order_cancel_all(&SESSION, c_all).await,
+                        }
+                    });
+                }
             }
-        }
+        })
     }
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
