@@ -8,7 +8,7 @@
 
 ## Architecture
 ### Database
-- **Scylla DB:** Velocity uses Scylla DB for low-latency database interactions, recovering orderbooks ensuring things never go wrong.
+- **Scylla DB:** Velocity uses Scylla DB for low-latency database interactions, recovering orderbooks, maintaining records and query history ensuring things never go wrong.
 ### In-Memory Storage
 - **Orderbooks and User Balances:** The orderbooks for registered markets and user balances are stored directly in the engine's memory. This allows for quick access and updates.
 - **Recovery Mechanism:** 
