@@ -1,6 +1,6 @@
 use std::time::{ Duration, Instant };
 
-use balance_exchanger::{ Filler, ScyllaDb };
+use db_filler::{ Filler, ScyllaDb };
 use redis::{ Connection, Value };
 use serde_json::from_str;
 

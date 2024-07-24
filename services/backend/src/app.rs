@@ -4,7 +4,6 @@ use actix_web::{ web::{ self, scope }, App, HttpServer };
 use redis::{ Connection, PubSub };
 
 use crate::{
-    config::GlobalConfig,
     db::ScyllaDb,
     routes::{
         order::*,
@@ -20,8 +19,8 @@ pub struct Application {
 }
 
 impl Application {
-    pub async fn build(config: GlobalConfig) -> Result<Self, std::io::Error> {
-        let address = format!("{}:{}", config.application.host, config.application.port);
+    pub async fn build(host: &str, port: &str) -> Result<Self, std::io::Error> {
+        let address = format!("{}:{}", host, port);
         let listner = TcpListener::bind(&address)?;
         let port = listner.local_addr().unwrap().port();
         let server = run(listner).await?;

@@ -3,7 +3,7 @@ use std::{ collections::HashMap, time::{ SystemTime, UNIX_EPOCH } };
 use enum_stringify::EnumStringify;
 use rust_decimal::Decimal;
 use scylla::{ FromRow, SerializeRow, Session };
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 

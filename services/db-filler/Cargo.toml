@@ -1,0 +1,27 @@
+[package]
+name = "db_filler"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "db_filler"
+
+[dependencies]
+enum_stringify.workspace = true
+futures.workspace = true
+rayon.workspace = true
+redis.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+scylla.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+tokio.workspace = true
+tokio-rayon.workspace = true
+uuid.workspace = true

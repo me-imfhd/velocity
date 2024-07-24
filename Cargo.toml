@@ -1,16 +1,10 @@
-[package]
-name = "backend"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+    "services/*"
+]
+resolver = "2"
 
-[lib]
-path = "src/lib.rs"
-
-[[bin]]
-path = "src/main.rs"
-name = "backend"
-
-[dependencies]
+[workspace.dependencies]
 actix-web = "4.7.0"
 bigdecimal = "0.4.4"
 config = "0.14.0"
@@ -31,3 +25,12 @@ tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 uuid = { version = "1.9.1", features = ["serde", "v4"] }
+rayon = "1.10.0"
+tokio-rayon = "2.1.0"
+log = "0.4.21"
+hex = "0.4.3"
+chrono = "0.4.38"
+lazy_static = "1.5.0"
+once_cell = "1.19.0"
+futures-util = "0.3.30"
+tokio-tungstenite = "0.23.1"
