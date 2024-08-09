@@ -63,3 +63,5 @@ https://github.com/me-imfhd/velocity/assets/114667178/976cf18e-29c4-47c6-aee2-12
 - Authentication
 - Trading View
 - Frontend Integration
+
+Contributions Most Welcomed!
